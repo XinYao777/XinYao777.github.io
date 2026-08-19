@@ -1,0 +1,98 @@
+baseURL: "https://xinyao777.github.io/"
+title: "XinYao 的技术博客"
+theme: "PaperMod"
+
+defaultContentLanguage: "zh"
+languages:
+  zh:
+    label: "中文"
+    locale: "zh-CN"
+    weight: 1
+
+enableRobotsTXT: true
+enableEmoji: true
+buildDrafts: false
+buildFuture: false
+buildExpired: false
+
+pagination:
+  pagerSize: 10
+
+minify:
+  disableXML: true
+  minifyOutput: true
+
+outputs:
+  home:
+    - HTML
+    - RSS
+    - JSON
+
+params:
+  env: production
+  description: "记录 AI、机器学习与编程的思考与实践"
+  author: "XinYao"
+  defaultTheme: auto
+  ShowReadingTime: true
+  ShowShareButtons: true
+  ShowPostNavLinks: true
+  ShowBreadCrumbs: true
+  ShowCodeCopyButtons: true
+  ShowWordCount: true
+  ShowToc: true
+  TocOpen: false
+  disableThemeToggle: false
+  math: true
+
+  homeInfoParams:
+    Title: "你好，我是 XinYao 👋"
+    Content: "AI / 机器学习工程师。这里记录我在技术、算法与工程实践中的笔记和思考。"
+
+  socialIcons:
+    - name: github
+      url: "https://github.com/XinYao777"
+    - name: rss
+      url: "index.xml"
+
+  fuseOpts:
+    isCaseSensitive: false
+    shouldSort: true
+    location: 0
+    distance: 1000
+    threshold: 0.4
+    minMatchCharLength: 0
+    keys: ["title", "permalink", "summary", "content"]
+
+menu:
+  main:
+    - identifier: posts
+      name: 文章
+      url: /posts/
+      weight: 10
+    - identifier: archives
+      name: 归档
+      url: /archives/
+      weight: 20
+    - identifier: tags
+      name: 标签
+      url: /tags/
+      weight: 30
+    - identifier: search
+      name: 搜索
+      url: /search/
+      weight: 40
+    - identifier: about
+      name: 关于
+      url: /about/
+      weight: 50
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    noClasses: false
+    codeFences: true
+    guessSyntax: true
+    lineNos: false
+    style: monokai
