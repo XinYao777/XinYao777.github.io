@@ -12,7 +12,7 @@ languages:
 enableRobotsTXT: true
 enableEmoji: true
 buildDrafts: false
-buildFuture: false
+buildFuture: true
 buildExpired: false
 
 pagination:
