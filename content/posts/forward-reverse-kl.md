@@ -20,6 +20,10 @@ $$D_{\mathrm{KL}}(P_S \,\|\, P_T) = \mathbb{E}_{y\sim P_S}\!\left[\log\frac{P_S(
 
 是 **Student** 在决定「哪些地方重要」。仅这一个交换，就导致了完全不同的行为。
 
+![Teacher（双峰）、Forward KL（mode-covering / zero-avoiding，中间出现 hallucination）、Reverse KL（mode-seeking / zero-forcing，丢掉一个 mode）三种分布对比](/images/forward-reverse-kl.png)
+
+> 图片来源：*A Survey of On-Policy Distillation for Large Language Models*
+
 ## 1. Forward KL：为什么它不敢漏掉 Teacher 的 mode
 
 写成积分形式：
