@@ -1,76 +1,192 @@
 ---
-title: "Why RL Matters：从 CoT Pattern 到蒸馏与软蒸馏"
-date: 2026-08-24T13:55:00+08:00
+title: "Why RL Matters：SFT、RL 与 Sequence Distillation 的分工"
+date: 2026-08-24T14:10:00+08:00
 draft: false
 tags: ["RL", "蒸馏", "笔记"]
 categories: ["AI 技术思考"]
-math: false
-summary: "读青稞AI《从 RL 到蒸馏，再到软蒸馏：Why RL Matters？》的归纳。先钉死“蒸馏”的定义（sequence distillation），再梳理 CoT pattern、RL 的两层作用、蒸馏与软蒸馏之间的关系。"
+math: true
+summary: "读青稞AI《从 RL 到蒸馏：Why RL Matters？》后的理论化归纳。把后训练拆成 Demonstrate（SFT）→ Explore（RL）→ Transfer（Sequence Distillation）三段：RL 承担“发现”的成本，蒸馏承担“复制”的成本。"
 ---
 
-> 原文：[《从 RL 到蒸馏，再到软蒸馏：Why RL Matters？》](https://mp.weixin.qq.com/s/S29z51EByrjWJgkvr6vwhQ)（青稞AI，作者 ybq）
+> 原文：[《从 RL 到蒸馏，再到软蒸馏：Why RL Matters？》](https://zhuanlan.zhihu.com/p/2067725096886785009)（作者 ybq，知乎；[青稞AI 转载](https://mp.weixin.qq.com/s/S29z51EByrjWJgkvr6vwhQ)）
 
-这是一篇讨论 RL 在 posttrain 阶段定位的文章。我按「定义先行 → CoT pattern → RL 的两层作用 → 蒸馏 → 软蒸馏」的顺序做归纳，其中最需要先钉死的是**「蒸馏」到底指什么**——不先说清楚，后面整条逻辑都会被这个词误导。
+这篇文章真正讨论的核心，其实不是「RL 和蒸馏谁更强」，而是一个更基础的问题：**在大模型后训练阶段，好的能力究竟是如何产生、如何迁移、又如何适配到不同模型上的？**
 
-## 先钉死定义：这里的「蒸馏」是 sequence distillation
+把文章的工程经验稍作理论化，整个过程可以概括成三个环节：
 
-全文的「蒸馏」**不是**经典 KD，两者必须分清：
+- **SFT** 负责提供一个好的策略初始化；
+- **RL** 负责在模型自身的策略分布中搜索更高奖励的行为；
+- **Sequence Distillation** 负责把已经搜索到的高质量行为迁移给其他模型。
 
-- **经典 KD（Hinton 2015，logit / 软标签蒸馏）**：student 去拟合 teacher 输出的**概率分布**（soft logits），用 KL 对齐。需要拿到 teacher 的 logits，是 token 级的分布匹配。
-- **本文的蒸馏 = sequence distillation（Kim & Rush 2016）**：teacher 生成完整 response（尤其是 CoT 序列），student 直接拿这些**硬 token 序列做 SFT**。只需要 teacher 的**输出文本**，不需要 logits。一句话概括就是 **“utilize better model response to sft”**。
+于是全文隐含的主线是：
 
-为什么值得反复强调：正因为是「拿更强模型的 response 做 sft」，才有了后文那个核心矛盾——**你搬来的是 teacher 的成品序列，而不是在对齐概率分布**，于是 student 自身的知识量 / tokenizer 跟这个序列并不匹配。这个矛盾正是 RL 存在的理由。
+$$\text{SFT} \rightarrow \text{RL Exploration} \rightarrow \text{Sequence Distillation} \rightarrow \text{Student Adaptation}$$
 
-## CoT Pattern：SFT 的定型职责
+其中最重要的区别是：**RL 主要承担「发现」的成本，蒸馏主要承担「复制」的成本。**
 
-SFT 阶段一个关键职责，是给 posttrain 的 **CoT pattern 定型**，这几乎决定了模型在 posttrain 阶段的效果上限。
+## 一、好的 CoT Pattern 到底是什么
 
-以 `997 × 1003` 为例，存在三种 pattern：
+对于 `997 × 1003`，存在三种推理方式：
 
 - **good**：`997 × 1003 = (1000 − 3)(1000 + 3) = 1000² − 3² = 999991`
-- **mediocre**：`1003 × (900 + 90 + 7) = 902700 + 90270 + 7021 = 999991`（步骤多、易错、token efficiency 低）
-- **bad**：`997 × 1003 = 999991`（不泛化，喂给小模型后很可能「见 997 就答 999991」）
+- **mediocre**：`997 × 1003 = 1003 × (900 + 90 + 7) = 902700 + 90270 + 7021 = 999991`
+- **bad**：`997 × 1003 = 999991`
 
-所以好的 CoT pattern 具备**输出更短、准确率更高、更易泛化**的特点。进入 agent 时代，我们绞尽脑汁构造和筛选的 environment trajectories，本质上仍是「reasoning 时代找更优 CoT pattern」这件事的延续。
+三个答案都可能正确，但泛化能力显然不同。文章把这种差异统称为 CoT Pattern，而从理论上还可以拆成三层：
 
-## RL 的两层作用
+1. **Reasoning Strategy**：采用什么求解策略，例如平方差公式 $(a-b)(a+b) = a^2 - b^2$；
+2. **Reasoning Trajectory**：真正执行出来的推理路径（`997×1003 → (1000−3)(1000+3) → 1000²−3² → 999991`）；
+3. **Surface Realization**：这个策略最终被表达成怎样的 token sequence——强模型可以只写一行，弱模型可能要写出更多中间步骤。
 
-**第一层：对 CoT pattern 做「本土化改造」。**
+所以「好的 CoT Pattern」更严格地说是：**好的 reasoning strategy + 一条高质量 reasoning trajectory + 一种适合当前模型能力的表达方式**。这三者并不等价。
 
-我们拿到的 CoT pattern 大多来自更强的模型或人工编辑，往往「表述极简、思路极优雅」。但要训练的模型没有足够能力直接消化它，需要结合自身能力改造。RL 的关键作用就在于：**在给定一个 CoT pattern 的前提下，通过 explore 足够多的 response，找到与自身「知识量、tokenizer」最契合的表达方式，并强化成专属 pattern。**
+## 二、SFT 真正承担的作用
 
-- 同样学会 `99 × 99 = 99 × (100 − 1)`，强模型可以跳步直接算 `9900 − 99 = 9801`；弱模型则要把省略的步骤全写出来才算得对。
-- reasoning 任务：SFT 只告诉模型「做完反思一下更好」，但反思几次最优最省，要靠 RL 自己摸索。
-- agent 任务：SFT 告诉模型有哪些 sub-agent、何时用；但 1T 模型调 2 个就能拿到正确 reward，100B 模型可能要调 5 个——最优 setting 由 RL 摸出来。
+文章说 SFT 给 CoT Pattern「定型」。理论化的表达更准确：**SFT 在改变模型的初始策略分布。** 设模型策略为 $\pi_\theta(y\mid x)$，SFT 的目标是
 
-这也解释了一个现象：**SFT 起点低的模型，RL 后终点可能更高**。起点低往往是 pattern 与模型能力不适配，而非 SFT 数据本身差。此外 RL 还带一点「基因突变 + 进化」的味道：当算力足够、`rollout_n` 开得足够大，模型有机会 explore 到全新的更优 pattern，此时好的 RL 算法（如 GRPO）需要抓住这条高质量数据，给足学习信号让模型记住它。
+$$\mathcal{L}_{\text{SFT}} = -\,\mathbb{E}_{(x,\,y^*)} \sum_t \log \pi_\theta\!\left(y^*_t \mid x,\, y^*_{<t}\right)$$
 
-**第二层：让模型变得可控（更被低估、也更重要）。**
+它做的事非常直接：**提高训练数据中这些 demonstration trajectory 的概率。**
 
-传统认知里，控制住 SFT 数据分布就能控制输出。但时代变了：**大量合成语料进入 pretrain / midtrain，即使 SFT 数据全都规范，posttrain 也越来越容易冒出乱七八糟的 pattern。** 道理很简单——pretrain 只看数据质量和干净程度，根本不管 posttrain 为体验加的那堆规则；几十 T 训出来的「高质量但格式不优雅」的数据，不是几条 SFT 数据能压制的，何况 SFT 本就不具备打压 pattern 的能力。
+关键在于：如果某种优质 strategy 在 pretrained model 中出现概率极低（比如 $P(y_{\text{good}}\mid x)=10^{-5}$），那么即使它存在于模型能力空间中，RL 也几乎无法通过有限 rollout 找到它。设优质 trajectory 的采样概率为 $p$，每题 rollout $N$ 次，至少发现一次的概率为
 
-而这些让产品头大的 case（多个 `<think>`/`</think>` 切分混乱、中英混杂、输出长度忽长忽短），在 RL 的 reward 惩罚面前格外稚嫩，随手给个惩罚 loss 就不再出现。现在标配的「思考档位 / 思考深度」，也是通过 RL 阶段给不同档位不同上下文窗口轻松实现的。
+$$P(\text{discover}) = 1 - (1-p)^N$$
 
-## RL 与蒸馏：RL 的收益可被蒸馏「窃取」
+- $p = 0.1,\ N = 32$：约 **96.6%**；
+- $p = 10^{-5},\ N = 128$：只有约 **0.128%**。
 
-目前没有直接证据表明 RL 后的模型相比 SFT 后的模型有质的提升——**RL 带来的收益是可以被蒸馏窃取的**。RL 本质仍是在找更好的 pattern，堆算力找到的好 pattern 价值千金，但「寻找过程」本身未必有价值。
+所以 SFT 对 RL 最重要的作用，不是严格意义上的「决定上限」，而是**把好的行为从「几乎探索不到」移动到「RL 可以探索到」的区域**——SFT shapes the exploration support。
 
-于是可以让 RL 后的模型当 teacher，通过蒸馏把它探索到的行为分布迁移到另一个模型上，得到指标接近 RL 模型的 student。业界常用的合版方案之一就是对多个 RL 子模型做 **reject sampling SFT**（另一路线是 OPD）。1T 模型 explore 到的 pattern 比 100B 丰富，把前者的优质 pattern 喂给后者，再用 RL 适应其具体表达（通常会让小模型输出变长），小模型指标就能逼近大模型——同尺寸、同词表时尤其屡试不爽。
+这也解释了：一个好的 SFT checkpoint 不能只看结束时的准确率，更要看它给 RL 留下了怎样的策略分布——好行为有没有足够概率被采样、模型是否还保留足够的策略熵、潜在优质 strategy 有没有被提前激活。**SFT 不只是「把准确率做高」的阶段，它还是 RL 的初始化阶段。**
 
-蒸馏甚至能让 student 超过 teacher（例如 teacher 的 CoT 中英混出，只保留质量更高的英文 CoT）。但作者提醒：**任何能让 student 超过 teacher 的操作，都应该反过来用去提升 teacher**，而不是自我感动于这个操作多厉害。
+## 三、为什么 SFT 起点低的模型 RL 后反而更强
 
-一句话总结作者的态度：**认为蒸馏无用，大抵没亲自训过大模型；认为蒸馏是 posttrain 的全部，大抵只想当追赶者。** 蒸馏是「偷看学习笔记」——先拿到高起点的 SFT 模型，再靠 RL 去 adapt pattern、fix bad pattern，一个优秀的 posttrain 模型才闪亮登场。
+用极强 teacher 的 trajectory 去训较弱 student，SFT 后效果不一定好。原因是：**teacher 最优的 trajectory，不一定是 student 最容易执行的 trajectory。**
 
-## 软蒸馏：更高级的「利用更强模型」
+设 teacher 可实现的策略集合为 $\Pi_T$，student 能稳定实现的为 $\Pi_S$，通常 $\Pi_S \subset \Pi_T$，于是 teacher 的最优策略 $\pi_T^*$ 未必落在 student 容易实现的区域。例如强模型可以直接写 `99×99 = 99×(100−1) = 9801`（内部稳定补全被省略的运算），弱模型则需要把 `99×100 − 99×1 = 9900 − 99 = 9801` 全写出来。抽象 strategy 相同，但 trajectory 和 surface realization 不同。
 
-distill CoT pattern 是最好用、也最低级的蒸馏。真正高级的做法是**借 sota 模型的能力优化自己的模型**，包括但不限于：
+所以文章说的「RL 对 CoT Pattern 做本土化改造」，理论化即：**RL 在 student 可实现的 policy class 中寻找高 reward 的 realization**——
 
-- 用 sota 合成现有模型**能力边界**上的数据；
-- 用 sota **诊断**现有模型的 pattern 缺陷；
-- 用 sota 优化 RL 阶段的 **verifier**。
+$$\pi_S^* = \arg\max_{\pi \in \Pi_S} \mathbb{E}[R]$$
 
-软蒸馏普遍存在——任何国内厂商都不敢说优化过程里没有 GPT / Claude 的帮助。**只要国外模型领先，国内模型就有源源不断的进步空间和优化手段。**
+teacher 给 student 的不是最终答案，而更像是「优秀策略所在的大致方向」；student 仍需在自己的能力约束下找到最合适的实现形式。因此仅比较 SFT 初始准确率，有时会误判一个模型后续 RL 的潜力。
 
-## 小结
+## 四、RL 到底为什么重要
 
-纯训练阶段已是明牌竞争，比的就是谁更能 scaling：**scaling model parameters、scaling RL data、scaling agent environments**。因此越想领跑的团队越要加大 RL 投入，早日摆脱对 sota 模型的（软）蒸馏依赖；反过来，若只追求某个能力的应用价值，蒸馏就已经是最好的选择。
+SFT 与 RL 一个本质区别：**SFT 告诉模型「应该生成什么」，RL 告诉模型「什么结果是好的」。** SFT 提高 $\pi_\theta(y^*\mid x)$；RL 的目标更接近
+
+$$\pi^* = \arg\max_{\pi}\ \mathbb{E}_{y\sim\pi}\big[R(x,y)\big]$$
+
+模型不必严格复现某条人工指定的 trajectory，只需找到高 reward 的行为。而我们真正关心的目标往往是复合的——答案正确、格式合法、语言一致、长度不过长、不重复反思、工具调用不过多，于是 reward 可以写成
+
+$$R = R_{\text{correct}} + \alpha R_{\text{format}} + \beta R_{\text{language}} - \lambda L_{\text{token}} - \mu C_{\text{tool}}$$
+
+我们没有规定「必须按这条 CoT 做」，而是说「满足这些目标即可，实现方式你自己找」。因此可以把 RL 抽象成 **Constraint-guided Policy Search**——这是它相对 SFT 极重要的差异。
+
+## 五、为什么 RL 很适合做「本土化」：训练分布视角
+
+还有一个比 CoT Pattern 更基础的视角——**训练分布**。SFT 的状态来自 demonstration，即 $s_t = (x,\, y^*_{<t})$，模型看到的 prefix 是人工或 teacher 写出的正确 prefix，可近似认为 $s \sim d_{\text{teacher}}$。但实际部署时模型面对的是自己生成的 prefix，$s \sim d_\pi$。一旦某一步 $y_{<t} \neq y^*_{<t}$，就可能进入训练数据从未出现过的状态——这就是经典的 distribution mismatch，也与 exposure bias 相关。
+
+而 RL 的训练轨迹来自模型自己，$y \sim \pi_\theta(\cdot\mid x)$，因此 $s \sim d_{\pi_\theta}$：
+
+- **SFT learns on demonstration states.**
+- **RL learns on student-generated states.**
+
+所以「本土化」除了「找到适合自己的推理长度和方式」外，还有更深一层含义：**RL 可以在 student 自己真正会访问到的状态分布上做 policy improvement。**
+
+## 六、为什么 RL 对可控性非常有效
+
+文章列了很多实际问题：生成多个 `<think>`、中英文混杂、时而不反思时而连续反思几十次、输出长度不稳定、Agent 工具调用次数不合理。
+
+文章说 SFT「不具备打压 Pattern 的能力」，这个说法略绝对。严格讲，交叉熵对 logit 的梯度为
+
+$$\frac{\partial L}{\partial z_j} = p_j - \mathbb{1}[\,j = y^*\,]$$
+
+目标 token 概率上升、竞争 token 概率相对下降，所以 SFT 并非只能「正向学习」。真正的问题是：**SFT 通常没有主动采样模型自己的 bad trajectory。** 如果「反思 → 再反思 → 无限循环」这种 prefix 从未出现在 SFT 数据中，SFT 就很难针对这个具体 failure mode 精确优化。
+
+RL 则不同：模型先自己 rollout $y_{\text{bad}} \sim \pi_\theta$，再由 verifier / reward 给出 $R(y_{\text{bad}}) < 0$。即——**SFT 只能间接 suppress bad behaviors，RL 更容易显式优化 student 自己产生的 bad behaviors。** 这就是为什么长度控制、格式控制、思考深度、工具调用次数等问题，往往非常适合在 RL 阶段解决；标配的「思考档位」也是通过 RL 给不同档位不同上下文窗口实现的。
+
+## 七、RL 更重要的价值：探索
+
+SFT 只有有限条 demonstration，$D_{\text{SFT}} = \{y^*_1, \dots, y^*_M\}$；而 RL 可以不断 $y \sim \pi_\theta$，访问越来越多 trajectory。当 rollout 足够多，就可能出现训练数据里没有的行为 $y_{\text{new}}$ 且 $R(y_{\text{new}}) > R(y_{\text{SFT}})$，此时好的 RL 算法（如 GRPO）需要抓住这条高质量数据，给足学习信号让模型记住它。
+
+所以 RL 至少可拆成两部分：
+
+- **Adaptation**：teacher / SFT 已给出好的 strategy，RL 找到最适合当前模型能力的实现方式；
+- **Exploration**：模型通过大量 sampling，有机会发现 demonstration 中没有的、更高 reward 的 trajectory。
+
+原文所谓「RL 有一点基因突变 + 进化的味道」，翻译成理论语言就是 **Policy-space Exploration + Selection**。
+
+## 八、为什么仅仅做蒸馏，就可能得到很强的模型
+
+首先明确：本文说的「蒸馏」主要指 **Sequence-level Distillation**，而不是狭义的 logit KD。强 teacher 生成完整 response $x \to y_T$，student 用这些 response 做 SFT：
+
+$$\mathcal{L}_{\text{distill}} = -\sum_t \log \pi_S\!\left(y^T_t \mid x,\, y^T_{<t}\right)$$
+
+从优化算法看，它就是 SFT；从数据来源和知识迁移关系看，它是 Sequence Distillation。所以一个重要区分是：**SFT 描述「怎么优化」，Distillation 描述「知识从哪里来」。** 人工数据做交叉熵是 Human SFT；teacher 生成数据做同样的交叉熵，训练形式仍是 SFT，但性质是 Sequence Distillation。
+
+因此文章说的「很多小作坊只做 SFT 不做 RL」，更准确的说法是：**很多团队只做 Teacher Response Distillation + SFT，而不自己承担大规模 RL Exploration。**
+
+## 九、为什么 Sequence Distillation 能复制大量 RL 收益
+
+假设一个很强的 teacher 已经过 RL。对一个 prompt $x$，它做了大量 rollout $\{y_1,\dots,y_K\}$，通过 verifier / reward 得到 $R(y_1),\dots,R(y_K)$，找到高质量 trajectory $y^*$。这个过程支付了昂贵的搜索成本，粗略写成
+
+$$C_{\text{RL}} = C_{\text{rollout}} + C_{\text{reward}} + C_{\text{policy opt}}$$
+
+但 student 不需要重走一遍，可以直接拿 $(x, y^*)$ 做监督学习 $-\log \pi_S(y^*\mid x)$。于是原本的「我该怎样从大量可能的 trajectory 中找到一个好的？」（搜索问题）被转换成「请模仿这条已经找到的好 trajectory」（模仿问题），计算成本完全不同。
+
+所以 RL 与 Sequence Distillation 的关系可以极简概括为：**RL 负责搜索，Sequence Distillation 负责复制搜索结果。** 这正是「蒸馏可以窃取 RL 收益」的真义——它并非说 RL 没意义，恰恰相反：**如果没有某个模型先支付 RL 的 exploration cost，就没有这些高质量 trajectory 可供蒸馏。**
+
+## 十、为什么资源有限的团队只做蒸馏也很合理
+
+如果目标不是探索 frontier，而是快速获得某个已存在的能力，那么重新支付一遍 RL exploration cost 往往并不经济。应用团队完全可以走
+
+$$\text{Strong Teacher} \to \text{Generate} \to \text{Filter} \to \text{Sequence Distillation} \to \text{Student SFT}$$
+
+而无需自己 Massive Rollout → Reward → RL Optimization。这本质是 **Exploration Cost Amortization**：一个强 teacher 支付一次昂贵探索成本 $C_{\text{exploration}}$，随后大量 student（$\pi_{S_1}, \pi_{S_2}, \dots$）复用它产生的高质量 trajectory，平摊到每个 student 上的探索成本不断下降。
+
+所以对 capability catch-up 而言，Sequence Distillation 的性价比可能极高。这些团队并没有证明 $\text{SFT} \approx \text{RL}$，而是在利用「有人已经替他们支付过 RL 的搜索成本」。
+
+## 十一、那为什么蒸馏之后还需要 RL
+
+因为 teacher 最优 trajectory 不一定等于 student 最优 trajectory。Sequence Distillation 解决的是 **Transfer**——把 teacher 已发现的高价值策略迁移给 student；但 student 仍有自己的模型容量、pretraining prior、representation、计算能力、推理稳定性、工具使用能力。teacher 给的 trajectory 可能过度压缩，也可能过于复杂。student 通过蒸馏知道「原来这个问题可以这样解决」，但仍需继续寻找「我怎样执行这个策略最稳定」。
+
+于是自然的训练路径是：
+
+$$\text{Teacher RL} \to \text{Sequence Distillation} \to \text{Student RL}$$
+
+第一阶段 teacher 帮 student 解决 **What to do**，第二阶段 student RL 解决 **How should I do it**。用更抽象的语言：Sequence Distillation 负责 Transfer，Student RL 负责 Adaptation。这也印证了文章的工程观察——把 1T 模型 RL 探索出的优质 Pattern 蒸馏给 100B 模型，再让 100B 通过 RL 对这些 Pattern 做适配。
+
+## 十二、RL 和蒸馏到底是什么关系
+
+至此可以把整个问题压缩成一个清晰框架：
+
+- **SFT — Policy Initialization**：提高优质 demonstration trajectory 的概率，让 RL 更容易探索到好策略；
+- **RL — Exploration + Adaptation**：在 student 自己的状态分布中按 reward 搜索更优行为，并找到适合当前模型能力的实现方式；
+- **Sequence Distillation — Capability Transfer**：把已经过昂贵搜索得到的高质量 trajectory 直接迁移给另一个模型。
+
+三者不是竞争关系，而是一条自然的生产链：
+
+$$\text{SFT} \to \text{RL Search} \to \text{High-quality Trajectories} \to \text{Sequence Distillation} \to \text{Student Adaptation}$$
+
+## 十三、由此解释的产业现象（含软蒸馏）
+
+对应用型团队，最重要的问题是「如何用最低成本把某个能力做到足够好」，答案很可能就是 **Strong Teacher + Sequence Distillation**，因为已有 frontier model 已帮你完成大量 exploration。
+
+比抄 response 更高级的做法，是**借 sota 模型的能力优化自己的模型**——用 sota 合成能力边界上的数据、诊断现有模型的 pattern 缺陷、优化 RL 的 verifier，这就是原文所谓的**软蒸馏**。它同样是 Transfer 的一种，只是不落在 response 拷贝上。软蒸馏普遍存在，国内厂商几乎都不敢说优化过程里没有 GPT / Claude 的帮助——只要国外模型领先，国内模型就有源源不断的优化手段。
+
+但对真正想推进 frontier 的团队，问题不同：如果所有团队都只做 distillation，新的高价值 trajectory 从哪里来？**Distillation 的前提永远是「存在一个更强的 teacher」。** 所以 distillation 擅长 Capability Transfer，而 RL 更重要的意义在于 Policy Improvement 与 Exploration。
+
+## 十四、重新理解 Why RL Matters
+
+因此 RL 的重要性，不应表述为「只有 RL 才能产生 reasoning」，也不能简单理解成「RL 一定比 SFT 强」。更准确的理解是：
+
+- **SFT shapes where the policy starts.**
+- **RL searches where the policy can improve.**
+- **Sequence Distillation amortizes the cost of discovering that improvement.**
+
+即：SFT 决定模型从哪里开始搜索；RL 在自己的策略空间中寻找更好的行为；Sequence Distillation 把别人已支付巨大搜索成本得到的成果低成本迁移过来。整个 post-training 的核心逻辑最终抽象成三个动词：
+
+$$\textbf{Demonstrate}\ (\text{SFT}) \quad \textbf{Explore}\ (\text{RL}) \quad \textbf{Transfer}\ (\text{Sequence Distillation})$$
+
+如果只是追赶已存在的能力，Transfer 往往是成本最低的方式；但如果希望继续产生新的能力和新的高价值策略，就必须有人继续承担 Exploration 的成本。这才是「从 RL 到蒸馏」背后真正的 **Why RL Matters**。
