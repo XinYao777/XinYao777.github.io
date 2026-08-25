@@ -22,7 +22,7 @@ summary: "后训练方法通常按“用什么 loss”来分类，但更关键�
 
 如果把语言模型理解为一个序列概率分布：
 
-$$\pi_\theta(y\mid x) = \prod_{t=1}^{T}\pi_\theta(y_t\mid x,y_{<t}),$$
+$$\pi_\theta(y\mid x) = \prod_{t=1}^{T}\pi_\theta(y_t\mid x,y_{\lt t}),$$
 
 那么后训练的本质，就是重新分配不同生成轨迹上的概率质量。
 
@@ -47,11 +47,11 @@ $$\mathcal D=\{(x,y^\star)\},$$
 
 SFT 的目标是：
 
-$$\mathcal L_{\mathrm{SFT}} = -\,\mathbb E_{(x,y^\star)\sim\mathcal D}\left[\sum_t \log\pi_\theta\left(y_t^\star\mid x,y_{<t}^\star\right)\right].$$
+$$\mathcal L_{\mathrm{SFT}} = -\,\mathbb E_{(x,y^\star)\sim\mathcal D}\left[\sum_t \log\pi_\theta\left(y_t^\star\mid x,y_{\lt t}^\star\right)\right].$$
 
 训练状态为：
 
-$$s_t^\star=(x,y_{<t}^\star).$$
+$$s_t^\star=(x,y_{\lt t}^\star).$$
 
 这些状态由外部数据决定，而不是由当前模型决定。模型无论原来会生成什么，都要被拉向数据集中给定的 token。
 
@@ -69,17 +69,17 @@ $$\boxed{\ s_t\sim d^{\mathcal D},\qquad \text{signal}=y_t^\star\ }$$
 
 SFT 的优势非常明确：监督密集、优化稳定，尤其适合冷启动、格式塑造和基础指令遵循。
 
-但它也存在一个结构性问题：所有示范 token 都会受到直接监督。对于任务关键 token（如 $\text{“因为 }a^2+b^2=c^2\text{”}$）SFT 会提高其概率；对于偶然出现的风格 token（如 $\text{“显然”“因此我们容易得到”}$）SFT 同样会提高其概率。
+但它也存在一个结构性问题：所有示范 token 都会受到直接监督。对于任务关键 token（如「因为 $a^2+b^2=c^2$」）SFT 会提高其概率；对于偶然出现的风格 token（如「显然」「因此我们容易得到」）SFT 同样会提高其概率。
 
 损失函数本身并不知道：
 
-$$\boxed{\ \text{这个 token 是决定答案正确性的关键步骤，还是数据集中的表达习惯}\ }$$
+> **这个 token 是决定答案正确性的关键步骤，还是数据集中的表达习惯？**
 
 因此，当训练数据分布与原模型相距较远时，SFT 可能产生范围较广的参数更新，并通过参数共享间接影响原有能力。
 
 需要特别强调：这并不意味着「正向 KL 必然造成遗忘」。更准确地说，遗忘来自以下因素的共同作用：
 
-$$\boxed{\ \text{外部状态分布} + \text{密集 token 监督} + \text{缺少保留原策略的内在约束}\ }$$
+> **外部状态分布 ＋ 密集 token 监督 ＋ 缺少保留原策略的内在约束**
 
 ## 二、RL：从模型自己的行为出发寻找高奖励方向
 
@@ -101,7 +101,7 @@ $$\boxed{\ s_t\sim d^{\pi_\theta}\ }$$
 
 因此，RL 主要在模型当前能够访问的轨迹附近调整概率质量：
 
-$$\text{当前会生成的行为}\rightarrow\text{其中更高奖励的行为}.$$
+**当前会生成的行为 → 其中更高奖励的行为**
 
 ![RL(PPO) 的分布更新示意](/images/opd/rl_distribution.svg)
 
@@ -135,7 +135,7 @@ $$y\sim\pi_S(\cdot\mid x),$$
 
 形成状态：
 
-$$s_t=(x,y_{<t}),\qquad s_t\sim d^{\pi_S}.$$
+$$s_t=(x,\,y_{\lt t}),\qquad s_t\sim d^{\pi_S}.$$
 
 然后 teacher 在 student 已经到达的状态上给出下一 token 分布：
 
@@ -166,9 +166,7 @@ $$\boxed{\ \text{Student controls support}\ }\qquad\boxed{\ \text{Teacher contro
 
 $$\text{teacher}\in\text{bad region}.$$
 
-更准确的做法是定义 teacher 的坏行为区域：
-
-$$\mathcal B_T = \left\{\,s:\pi_T(\cdot\mid s)\text{ 在状态 }s\text{ 上给出错误或退化的监督}\,\right\}.$$
+更准确的做法是定义 teacher 的坏行为区域 $\mathcal B_T$：即所有「teacher 分布 $\pi_T(\cdot\mid s)$ 在状态 $s$ 上给出错误或退化监督」的状态 $s$ 组成的集合。
 
 然后考察 student 生成的状态是否落入该区域：
 
@@ -176,11 +174,11 @@ $$\boxed{\ s_t\in\mathcal B_T\ }$$
 
 也就是：**student 走进了 teacher 的 bad region。** teacher 的坏行为进入总体训练梯度的程度，取决于：
 
-$$\Pr_{s_t\sim d^{\pi_S}}\left(s_t\in\mathcal B_T\right).$$
+$$\Pr_{s_t\sim d^{\pi_S}}\!\left(s_t\in\mathcal B_T\right).$$
 
-如果 $\Pr_{s_t\sim d^{\pi_S}}\left(s_t\in\mathcal B_T\right)\approx 0$，那么 teacher 即使在其他任务区域发生了明显退化，那些退化行为也很少被查询，自然不会大量进入 OPD 梯度。因此：
+如果 $\Pr_{s_t\sim d^{\pi_S}}\!\left(s_t\in\mathcal B_T\right)\approx 0$，那么 teacher 即使在其他任务区域发生了明显退化，那些退化行为也很少被查询，自然不会大量进入 OPD 梯度。因此：
 
-$$\boxed{\ \text{teacher 整体发生遗忘}\not\Rightarrow\text{student 会完整继承 teacher 的遗忘}\ }$$
+> **teacher 整体发生遗忘 ⇏ student 会完整继承 teacher 的遗忘**
 
 真正决定哪些 teacher 行为会被蒸馏的，是 student 的状态分布与 teacher bad region 的交集 $d^{\pi_S}\cap\mathcal B_T$。
 
@@ -190,9 +188,9 @@ OPSD，即 On-Policy Self-Distillation，是理解 OPD 信用分配问题的一�
 
 在普通 OPD 中，teacher 与 student 往往是不同模型。两者 KL 较大，可能来自：
 
-$$\text{能力差异} + \text{知识差异} + \text{风格差异} + \text{表达习惯差异}.$$
+> **能力差异 ＋ 知识差异 ＋ 风格差异 ＋ 表达习惯差异**
 
-因此，我们无法判断 $\text{teacher-student disagreement}$ 究竟是不是 $\text{task importance}$。
+因此，我们无法判断这种 teacher-student disagreement 究竟是不是真正的 task importance。
 
 OPSD 则让同一个模型同时扮演 teacher 和 student（$\theta_T=\theta_S$）。区别只在于 teacher 可以看到额外的正确答案或推理轨迹 $z$：
 
@@ -210,7 +208,7 @@ $$D_{\mathrm{KL}}\left(\pi_S(\cdot\mid s_t)\,\Vert\,\pi_T(\cdot\mid s_t,z)\right
 
 然而，[OPSD 论文](https://arxiv.org/abs/2601.18734)的逐 token 分析发现，较高 KL 经常出现在 "wait""alright" 等风格或转折 token 上，而 "power""exponent""logarithm" 等数学 token 的 KL 反而较低。这暴露出一个关键问题：
 
-$$\boxed{\ D_{\mathrm{KL}}\text{ 大}\not\Rightarrow\text{该 token 对任务更重要}\ }$$
+> **$D_{\mathrm{KL}}$ 大 ⇏ 该 token 对任务更重要**
 
 teacher-student KL 只能说明「teacher 和 student 在这里意见不同」，不能直接说明「修改这个位置能够使最终答案更正确」。因此，OPSD 不是在证明 OPD 无效，而是在揭示 OPD 的信用分配偏差：
 
@@ -252,7 +250,7 @@ $$\boxed{\ \text{RL signal} = \text{reward advantage}\ }\qquad\boxed{\ \text{OPD
 
 两个 OPD student 的表现十分接近。更意外的是，使用已经发生遗忘的 SFT teacher，student 仍然没有完整继承其遗忘。这说明：
 
-$$\boxed{\ \text{teacher 提供什么信号很重要，但 student 在什么状态上询问 teacher 同样重要}\ }$$
+> **teacher 提供什么信号很重要，但 student 在什么状态上询问 teacher 同样重要。**
 
 OPD student 甚至可能在特定 benchmark 上超过 teacher，因为 teacher 不再负责生成完整轨迹，而只是在 student 真正访问的状态上提供局部建议。这类似于：
 
@@ -270,7 +268,7 @@ OPD 直接在 student 自己生成的 prefix 上询问 teacher（$s_t\sim d^{\pi
 
 这与 DAgger 的交互式模仿学习思想高度一致，也正是 [GKD](https://arxiv.org/pdf/2306.13649) 将语言模型蒸馏重新解释为 interactive expert imitation learning 的原因：
 
-$$\boxed{\ \text{OPD}\approx\text{面向自回归语言模型的分布式 DAgger}\ }$$
+> **OPD ≈ 面向自回归语言模型的分布式 DAgger**
 
 student 去自己会犯错的地方，再让 teacher 在那里提供监督。
 
@@ -282,7 +280,7 @@ $$\boxed{\ \text{SFT vs RL} = \text{supervised loss vs reward optimization}\ }$$
 
 而这篇文章提出了一个更具有解释力的坐标系：
 
-$$\boxed{\ \text{算法差异} = \text{状态分布}\times\text{学习信号}\ }$$
+> **算法差异 ＝ 状态分布 × 学习信号**
 
 由此，RL 的特殊性可能并不完全来自 policy gradient 本身。因为 OPD 没有直接最大化任务 reward，却保留了 $y\sim\pi_S$ 这一 on-policy 结构，并表现出部分与 RL 相似的性质：
 
@@ -293,11 +291,11 @@ $$\boxed{\ \text{算法差异} = \text{状态分布}\times\text{学习信号}\ }
 
 所以 OPD 在文章中不仅是一种训练算法，更是一个「实验探针」：
 
-$$\boxed{\ \text{移除 RL reward，保留 on-policy sampling，观察 RL-like properties 是否仍然存在}\ }$$
+> **移除 RL reward，保留 on-policy sampling，观察 RL-like properties 是否仍然存在**
 
 实验结果促使作者提出：
 
-$$\boxed{\ \text{on-policy data 可能是 RL 与 OPD 的承重部件}\ }$$
+> **on-policy data 可能是 RL 与 OPD 的承重部件**
 
 但这一结论目前仍应被视为综合研究假说，而不是已经证明的普适定理。
 
@@ -333,14 +331,14 @@ $$\boxed{\ \text{On-policy}+\text{Dense credit}+\text{Low-bias / Task-aligned}\ 
 
 真正影响遗忘、泛化和能力迁移的，不只是监督信息量，也不只是 loss 的名称，而是：
 
-$$\boxed{\ \text{模型在哪里被训练}\times\text{训练信号指向哪里}\times\text{信用分配是否准确}\ }$$
+> **模型在哪里被训练 × 训练信号指向哪里 × 信用分配是否准确**
 
 因此，SFT → RL → OPD 所体现的并不是简单的算法替换，而是一种后训练范式的逐步演进：
 
-$$\boxed{\ \text{拟合外部答案}\rightarrow\text{在自身分布上优化结果}\rightarrow\text{在自身分布上吸收稠密专家信息}\ }$$
+> **拟合外部答案 → 在自身分布上优化结果 → 在自身分布上吸收稠密专家信息**
 
 而尚未解决的最终问题是：
 
-$$\boxed{\ \text{如何在 on-policy 数据上，获得稠密、低偏差且真正任务对齐的 credit？}\ }$$
+> **如何在 on-policy 数据上，获得稠密、低偏差且真正任务对齐的 credit？**
 
 这可能才是下一代大模型后训练算法真正需要突破的方向。
