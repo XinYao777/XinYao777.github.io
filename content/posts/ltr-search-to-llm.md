@@ -83,7 +83,7 @@ $$
 | \(p_i\) | 经过 sigmoid / softmax 后得到的概率        |
 | \(S_i\) | 最终业务使用的 score                      |
 
-其中 \(S_i\) 并不一定属于 \([0,1]\)。它可以直接等于 \(S_i=z_i\)，也可以 \(S_i=\sigma(z_i)\)，或者在 0～4 生成式满意度模型中：
+其中 \(S_i\) 并不一定属于 \([0,1]\)。它可以直接等于 \(S_i=z_i\)，也可以 \(S_i=\sigma(z_i)\)，或者在 0～4 生成式相关性模型中：
 
 $$
 S_i=\sum_{k=0}^{4}kP(y=k|q,d_i)
@@ -168,7 +168,9 @@ Doc D   label=0
 
 ## 四、RankNet：Sigmoid 作用的不是单独 score，而是 score difference
 
-RankNet 是理解 Reward Model 最重要的一座桥。首先模型输出 \(z_i=f(q,d_i)\) 和 \(z_j=f(q,d_j)\)，其中 \(z_i,z_j\) 是 raw ranking score。然后定义：
+两个候选谁更好，最经典的建模是 Bradley-Terry 模型：给每个对象一个隐效用（latent utility），两者的偏好概率由效用之差经 logistic 函数给出。RankNet 可以看成 Bradley-Terry 在深度学习里的直接实现——用神经网络算出效用、再用同样的 logistic 形式建模偏序。所以简单来说，理解 Reward Model 可以从 RankNet 入手。
+
+首先模型输出 \(z_i=f(q,d_i)\) 和 \(z_j=f(q,d_j)\)，其中 \(z_i,z_j\) 是 raw ranking score。然后定义：
 
 $$
 P(i\succ j)=\sigma(z_i-z_j)
@@ -186,7 +188,7 @@ $$
 \boxed{\sigma(z_i-z_j)=P(i\succ j)}
 $$
 
-而不是 \(\sigma(z_i)\) 代表某个绝对满意概率。这是一个非常容易被混淆的地方。
+而不是 \(\sigma(z_i)\) 代表某个绝对相关概率。这是一个非常容易被混淆的地方。
 
 ## 五、统一理解 Pairwise 的 Weight、Margin 与 Temperature
 
@@ -250,7 +252,7 @@ $$
 
 另一种做法先定义 \(S_i=\sigma(z_i)\) 使 \(S_i\in(0,1)\)，然后要求 \(S_i-S_j\ge m\)，可以称为 **Bounded-score Margin**。例如 \(m=0.3\) 就具有非常直观的固定尺度。
 
-但需要注意：\(\sigma(z_i)\) 仅仅因为属于 \([0,1]\)，并不意味着它天然等于"80% 满意概率"。如果训练只使用 Pairwise RankNet，那么真正具有概率意义的是 \(\sigma(z_i-z_j)\)，而不是 \(\sigma(z_i)\)。
+但需要注意：\(\sigma(z_i)\) 虽然落在 \([0,1]\) 区间，却不代表它就是一个校准过的绝对概率——它并不天然等于"该候选有 80% 概率相关"。原因在于，如果训练只使用 Pairwise RankNet，模型学到的是候选之间的相对差值；真正具有概率意义的是刻画偏序的 \(\sigma(z_i-z_j)\)，而不是单点的 \(\sigma(z_i)\)。
 
 ## 七、一个非常重要的结论：Pairwise 不保证 absolute calibration
 
@@ -401,7 +403,7 @@ $$
 
 ## 十五、生成式模型带来了一种新的 Scoring Function
 
-LLM 不一定需要增加 scalar head，它本身就有 LM Head。因此可以直接把排序问题转化成"生成一个类别 token"。例如满意度定义 0/1/2/3/4，输入 \(x=(q,d)\)，Decoder 得到 \(h=f_\theta(x)\)，LM Head：
+LLM 不一定需要增加 scalar head，它本身就有 LM Head。因此可以直接把排序问题转化成"生成一个类别 token"。例如相关性等级定义 0/1/2/3/4，输入 \(x=(q,d)\)，Decoder 得到 \(h=f_\theta(x)\)，LM Head：
 
 $$
 \mathbf z=W_{vocab}h
@@ -421,7 +423,7 @@ $$
 
 ## 十六、从 Generative Classification 得到 Ranking Score
 
-有了 \(p_0,\dots,p_4\)，可以定义期望满意度：
+有了 \(p_0,\dots,p_4\)，可以定义期望相关性打分：
 
 $$
 \boxed{S_{\text{rank}}=\mathbb E[y|q,d]=\sum_{k=0}^{4}kp_k}
@@ -429,13 +431,13 @@ $$
 
 例如 \(P(0)=0.01,\ P(1)=0.02,\ P(2)=0.07,\ P(3)=0.30,\ P(4)=0.60\)，则 \(S_{\text{rank}}=3.46\)。这个连续 score 可以直接进行排序。
 
-如果 3、4 定义为满意，还可以计算：
+如果把 3、4 定义为高相关，还可以计算：
 
 $$
 \boxed{S_{\text{card}}=P(y\ge3)=p_3+p_4}
 $$
 
-于是同一个模型可以同时提供：排序 score、满意概率、出卡 threshold。
+于是同一个模型可以同时提供：排序 score、高相关概率、以及一个决策 threshold。
 
 ## 十七、Generative Ranker 与 Scalar Ranker 的区别
 
@@ -443,7 +445,7 @@ $$
 
 **Scalar Head：** \(h\rightarrow w^\top h\rightarrow z\)，典型如 Reward Model。
 
-**Generative Head：** \(h\rightarrow W_{vocab}h\rightarrow\) vocabulary logits，然后 label logits \(\rightarrow softmax\rightarrow P(y)\rightarrow S\)。
+**Generative Head：** \(h\rightarrow W_{vocab}h\rightarrow\) vocabulary logits，取出其中 label token 对应的 logits \(z\)，再 \(z\rightarrow softmax\rightarrow P(y)\rightarrow S\)。
 
 两者最终都可以实现 \(f(q,d)\rightarrow score\)，区别只是 score 的产生方式不同。
 
@@ -559,48 +561,7 @@ Pointwise → Pairwise → Listwise → LLM
 
 因此：API 是工程封装层；Point/Pair/List 是训练目标层；Scalar/Generative 是 scoring head 层；Independent/Joint 是模型结构层。这几个维度应该彻底拆开。
 
-## 二十五、回到搜题满意度：一个自然的实验体系
-
-对于搜题场景，可以继续保留传统搜索排序非常成熟的数据形式：
-
-```text
-qid
-query
-[
-  (doc1, 4),
-  (doc2, 3),
-  (doc3, 3),
-  (doc4, 2),
-  (doc5, 1),
-  (doc6, 0)
-]
-```
-
-不要在数据生产阶段提前退化成 pair 或 positive/negative。这份数据可以生成不同 training view。
-
-### Baseline 1：Scalar + Pairwise
-
-模型 \(z_i=f(q,d_i)\)，训练：
-
-$$
-L_{pair}=w_{ij}\log\left(1+\exp\left(-\frac{z_i-z_j-m_{ij}}{\tau}\right)\right)
-$$
-
-这是传统搜索排序经验最自然的延续。
-
-### Baseline 2：Generative Pointwise
-
-模型输出 vocabulary logits \(\mathbf z\)，截取 \(z_0,\dots,z_4\)，重新归一化 \(p_k=softmax(z_0,\dots,z_4)_k\)，训练 \(L_{point}=-\log p_y\)。排序 \(S_{\text{rank}}=\sum_k kp_k\)，出卡 \(S_{\text{card}}=p_3+p_4\)。
-
-### Experiment 3：Pointwise + Pairwise
-
-在生成式 0～4 模型之上 \(S_i=\sum_kkp_{ik}\)，再增加 \(L_{pair}\)，最终 \(L=L_{point}+\lambda L_{pair}\)。这样 Pointwise 负责学习绝对满意度，Pairwise 负责同一个 Query 下候选排序，两个目标的关系就非常清楚。
-
-### Experiment 4：Graded Listwise
-
-如果后续尝试 Listwise，不应该简单把 0/1/2/3/4 压成 binary positive/negative，而应该保留 graded supervision \([y_1,\dots,y_n]\rightarrow[q_1,\dots,q_n]\)，再和 \(softmax(z_1,\dots,z_n)\) 进行匹配。这样才能真正利用已有满意度等级数据。
-
-## 二十六、大模型时代并没有推翻搜索排序
+## 二十五、大模型时代并没有推翻搜索排序
 
 如果从 2022 年传统搜索排序一路看到今天，其实技术脉络是非常连续的。
 
@@ -632,4 +593,4 @@ $$
 
 > **排序问题的监督范式基本稳定，真正发生变化的是 Scoring Function 的表达能力，以及候选之间是否能够进入模型内部发生联合建模。**
 
-从这个角度看，Reward Model、GTE/BGE Reranker、Qwen-Reranker，以及未来面向 Agent、RAG、搜索满意度的 Ranking Model，其实都可以被统一放回同一个 Learning-to-Rank 框架中理解。
+从这个角度看，Reward Model、GTE/BGE Reranker、Qwen-Reranker，以及未来面向 Agent、RAG、搜索相关性的 Ranking Model，其实都可以被统一放回同一个 Learning-to-Rank 框架中理解。
