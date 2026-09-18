@@ -132,7 +132,9 @@ I / love / artificial / intelligence
 }
 \]
 
-## 一、故事要从一个比大模型早 70 年的问题讲起：机器眼里的语言是什么？
+## 第一部分：缘起——机器如何理解语言
+
+### 故事要从一个比大模型早 70 年的问题讲起：机器眼里的语言是什么？
 
 1954 年 1 月，Georgetown University 与 IBM 做了一次后来非常著名的机器翻译演示。
 
@@ -180,7 +182,7 @@ semantic role
 \boxed{\text{Human-designed Representation}}
 \]
 
-## 二、机器翻译曾经做过一个宏大的梦：能不能先翻译成「意义」？
+### 机器翻译曾经做过一个宏大的梦：能不能先翻译成「意义」？
 
 早期机器翻译的发展过程中，出现过一张非常经典的图：**Vauquois Triangle。**
 
@@ -291,7 +293,7 @@ Z=f_\theta(x)
 
 由数据和神经网络学习出来。
 
-## 三、但在讨论「意义」之前，人们首先碰到了一个非常现实的问题：什么才叫一个词？
+### 但在讨论「意义」之前，人们首先碰到了一个非常现实的问题：什么才叫一个词？
 
 英语会让人产生一个错觉。因为：
 
@@ -359,7 +361,7 @@ I love artificial intelligence
 
 「词」本身就是一种抽象。
 
-## 四、更麻烦的问题是：语言根本不是一个封闭集合
+### 更麻烦的问题是：语言根本不是一个封闭集合
 
 假设我们决定：
 
@@ -425,7 +427,9 @@ Obamacare
 
 Sennrich 等人在 2016 年那篇后来影响极大的论文《Neural Machine Translation of Rare Words with Subword Units》中，正是从神经机器翻译的 open-vocabulary / rare-word 问题出发，把 subword tokenization 推成了主流解决方案。
 
-## 五、一个最暴力的办法：既然「词」会无限增长，那就不用词
+## 第二部分：从词到子词，再到字节
+
+### 一个最暴力的办法：既然「词」会无限增长，那就不用词
 
 例如：
 
@@ -513,7 +517,7 @@ N\uparrow
 \boxed{\text{Subword}}
 \]
 
-## 六、Subword 的本质不是「找到正确语言单位」，而是找到一个工程折中
+### Subword 的本质不是「找到正确语言单位」，而是找到一个工程折中
 
 例如：
 
@@ -591,7 +595,7 @@ xyzabc
 
 这时候，一个在今天已经非常熟悉的算法进入了 NLP：**BPE。**
 
-## 七、BPE 最有意思的地方是：它原本根本不是一个 NLP 算法
+### BPE 最有意思的地方是：它原本根本不是一个 NLP 算法
 
 Byte Pair Encoding 最早由 Philip Gage 在 1994 年作为数据压缩算法提出。
 
@@ -602,9 +606,7 @@ Byte Pair Encoding 最早由 Philip Gage 在 1994 年作为数据压缩算法提
 也就是说：
 
 \[
-(a^*,b^*)
-=
-\arg\max_{a,b}Count(a,b)
+(a^*,b^*) = \arg\max_{a,b}Count(a,b)
 \]
 
 然后：
@@ -681,7 +683,7 @@ Count(a,b)
 }
 \]
 
-## 八、这里必须建立第一个重要框架：一种 Token，可以同时拥有三种完全不同的「意义」
+### 这里必须建立第一个重要框架：一种 Token，可以同时拥有三种完全不同的「意义」
 
 例如 vocabulary 中出现：
 
@@ -732,7 +734,7 @@ in + g
 
 这个区分不仅适用于 Tokenizer，理解整个深度学习都非常有用。
 
-## 九、WordPiece、BPE、Unigram，到底差在哪里？
+### WordPiece、BPE、Unigram，到底差在哪里？
 
 这里不必陷入每个实现细节，只需要抓住它们所处的抽象层级。
 
@@ -773,9 +775,7 @@ S=(t_1,\dots,t_n)
 可以定义：
 
 \[
-P(S)
-=
-\prod_i P(t_i)
+P(S) = \prod_i P(t_i)
 \]
 
 然后寻找高概率的 segmentation。
@@ -797,7 +797,7 @@ WordPiece 则采用另一种 vocabulary construction / segmentation 准则。Sch
 
 实际上它们只是同一基本矛盾下不同的具体方案。
 
-## 十、SentencePiece 又是另一个很容易被误解的名字
+### SentencePiece 又是另一个很容易被误解的名字
 
 SentencePiece 经常和 BPE、WordPiece、Unigram 并排列出来。严格来说不够准确。
 
@@ -839,7 +839,7 @@ Raw Text
 Tokenizer
 ```
 
-## 十一、但是即使 Character 仍然没有彻底解决「开放世界」
+### 但是即使 Character 仍然没有彻底解决「开放世界」
 
 因为 Unicode 字符本身也是一个很大的空间。
 
@@ -889,7 +889,7 @@ b_i\in\{0,1,\dots,255\}
 
 > 如果最底层单位是 byte，那么理论上根本不需要 `<UNK>`。
 
-## 十二、Byte-level BPE 的本质：Universal Alphabet + Learned Compression
+### Byte-level BPE 的本质：Universal Alphabet + Learned Compression
 
 以 GPT-2 的 tokenizer 实现为例，它首先把 UTF-8 bytes 映射到可逆的 Unicode 表示，再在这些序列上执行 BPE；OpenAI 原始 GPT-2 encoder 代码甚至在 `bytes_to_unicode()` 的注释中明确讨论了避免大型字符词表和 unknown 的动机。
 
@@ -946,7 +946,9 @@ N\downarrow
 }
 \]
 
-## 十三、这时候我们必须第一次停下来问：Tokenizer 到底在优化什么？
+## 第三部分：Tokenizer 究竟在优化什么
+
+### 这时候我们必须第一次停下来问：Tokenizer 到底在优化什么？
 
 很多介绍会说：
 
@@ -996,7 +998,7 @@ N_B=8
 }
 \]
 
-## 十四、为什么不是「越压缩越好」？因为模型最终不是在存文件，而是在学习
+### 为什么不是「越压缩越好」？因为模型最终不是在存文件，而是在学习
 
 压缩算法最关心：
 
@@ -1072,7 +1074,9 @@ N\rightarrow\min
 }
 \]
 
-## 十五、中文，是研究 Tokenizer 最好的「显微镜」
+## 第四部分：中文——观察 Tokenizer 的显微镜
+
+### 中文，是研究 Tokenizer 最好的「显微镜」
 
 为什么中文特别有意思？因为中文几乎同时暴露了 Tokenizer 的所有矛盾。
 
@@ -1133,7 +1137,7 @@ N\rightarrow\min
 
 这也是为什么中文 Tokenization 不是「英文 Tokenization 换个语言」那么简单。
 
-## 十六、BERT 时代有一个非常有代表性的选择：中文接近按字切
+### BERT 时代有一个非常有代表性的选择：中文接近按字切
 
 经典 Chinese BERT 中，每个汉字基本可以被看作一个独立单位。所以：
 
@@ -1175,7 +1179,7 @@ N\rightarrow\min
 
 希望训练目标迫使模型更多地学习 word-level information。
 
-## 十七、中文甚至还可以进一步往「字里面」走
+### 中文甚至还可以进一步往「字里面」走
 
 2023 年 TACL 的《Sub-Character Tokenization for Chinese Pretrained Language Models》提出：
 
@@ -1209,7 +1213,7 @@ N\rightarrow\min
 
 本身就是一种建模选择。
 
-## 十八、所谓「中文税」，第一层其实只是一个非常朴素的工程问题
+### 所谓「中文税」，第一层其实只是一个非常朴素的工程问题
 
 假设同样的信息量，英文被 tokenizer 编成：
 
@@ -1283,7 +1287,7 @@ token 的 context window，对两种语言实际能够容纳的自然语言内�
 \boxed{\text{给不同语言和模式分配有限的「压缩预算」}}
 \]
 
-## 十九、但是 2025 年的一项中文研究让问题突然变得更深了
+### 但是 2025 年的一项中文研究让问题突然变得更深了
 
 如果中文 Tokenizer 的问题仅仅是成本，那么最直接的目标似乎就是：
 
@@ -1309,7 +1313,7 @@ token 的 context window，对两种语言实际能够容纳的自然语言内�
 
 论文利用了汉字、Unicode、UTF-8 与 BPE 之间一个非常特殊但真实存在的结构关系。
 
-## 二十、一个「本来毫无语言意义」的 Byte Pattern，竟然可以变成语义 Shortcut
+### 一个「本来毫无语言意义」的 Byte Pattern，竟然可以变成语义 Shortcut
 
 例如汉字 `茶` 和 `茎` 都含有 `艹` 这样的语义部件。
 
@@ -1353,7 +1357,7 @@ Count(byte\ sequence)
 
 就发生了。这是一条极其重要的因果链。
 
-## 二十一、这篇论文最精彩的地方，是它真的验证了模型会被这种 Token 边界「欺骗」
+### 这篇论文最精彩的地方，是它真的验证了模型会被这种 Token 边界「欺骗」
 
 作者构造了控制实验。两个汉字可以真正具有相同 semantic radical，或者没有相同 radical；与此同时它们又可能共享 initial token，或者不共享。于是形成一个经典的 \(2\times2\) 实验。
 
@@ -1379,7 +1383,7 @@ GPT-4、GPT-4o 和 Llama 3 都表现出了这种影响。
 }
 \]
 
-## 二十二、这时候我们终于可以明确区分四件经常被混在一起的东西
+### 这时候我们终于可以明确区分四件经常被混在一起的东西
 
 假设一个 Token 是：
 
@@ -1427,7 +1431,9 @@ GPT-4、GPT-4o 和 Llama 3 都表现出了这种影响。
 
 我认为这是理解 Tokenizer 时最值得建立的框架之一。
 
-## 二十三、现在再问一个更大的问题：为什么语言模型一定要 Tokenize？
+## 第五部分：概率建模与序贯决策视角
+
+### 现在再问一个更大的问题：为什么语言模型一定要 Tokenize？
 
 到这里，我们一直在讲：一个词应该怎么切。但这仍然停留在 Tokenizer 内部。
 
@@ -1466,12 +1472,7 @@ P(x_1,x_2,\dots,x_T)
 利用概率链式法则：
 
 \[
-\boxed{
-P(x_1,\dots,x_T)
-=
-\prod_{t=1}^{T}
-P(x_t|x_{<t})
-}
+\boxed{ P(x_1,\dots,x_T) = \prod_{t=1}^{T} P(x_t|x_{\lt t}) }
 \]
 
 注意：这不是 Transformer 发明的。这是概率论的链式分解。
@@ -1488,7 +1489,7 @@ P(x_t|x_{<t})
 
 > Tokenizer 实际上定义了 \(P(x)\) 进行自回归分解时的**离散粒度**。
 
-## 二十四、从这里开始，Token 就不再只是「语言单位」
+### 从这里开始，Token 就不再只是「语言单位」
 
 假设：
 
@@ -1511,21 +1512,13 @@ P(\text{人工智能}|context)
 Tokenizer B：`[人工][智能]`，则：
 
 \[
-P(\text{人工智能}|context)
-=
-P(\text{人工}|context)
-P(\text{智能}|context,\text{人工})
+P(\text{人工智能}|context) = P(\text{人工}|context) P(\text{智能}|context,\text{人工})
 \]
 
 Tokenizer C：`[人][工][智][能]`，则：
 
 \[
-P(x)
-=
-P(\text{人}|s_0)
-P(\text{工}|s_1)
-P(\text{智}|s_2)
-P(\text{能}|s_3)
+P(x) = P(\text{人}|s_0) P(\text{工}|s_1) P(\text{智}|s_2) P(\text{能}|s_3)
 \]
 
 原始信息没有变。但概率分解的路径变了。这意味着：
@@ -1536,12 +1529,12 @@ P(\text{能}|s_3)
 }
 \]
 
-## 二十五、更进一步：自回归语言模型可以被写成一个极其简单的序贯决策过程
+### 更进一步：自回归语言模型可以被写成一个极其简单的序贯决策过程
 
 定义状态：
 
 \[
-s_t=x_{<t}
+s_t=x_{\lt t}
 \]
 
 也就是当前已经生成出来的完整 Token 前缀。
@@ -1555,17 +1548,13 @@ a_t=x_t
 即下一步选择哪个 Token。那么：
 
 \[
-\pi_\theta(a_t|s_t)
-=
-P_\theta(x_t|x_{<t})
+\pi_\theta(a_t|s_t) = P_\theta(x_t|x_{\lt t})
 \]
 
 状态转移则极其简单：
 
 \[
-s_{t+1}
-=
-s_t\oplus a_t
+s_{t+1} = s_t\oplus a_t
 \]
 
 其中 \(\oplus\) 表示 append。例如当前状态 `[人工]`，模型执行动作 `[智能]`，新状态就是 `[人工][智能]`。
@@ -1584,7 +1573,7 @@ s_{t+1}=s_t\oplus a_t
 
 概率就是 1。
 
-## 二十六、这里要特别严谨：Pretraining 不是强化学习
+### 这里要特别严谨：Pretraining 不是强化学习
 
 虽然我们可以把自回归生成表示成 MDP-like sequential decision process，但不能由此说：
 
@@ -1596,7 +1585,7 @@ s_{t+1}=s_t\oplus a_t
 \max_\theta
 \sum_t
 \log
-P_\theta(x_t^*|x_{<t}^*)
+P_\theta(x_t^*|x_{\lt t}^*)
 \]
 
 训练数据已经告诉模型：
@@ -1639,12 +1628,12 @@ R(\tau)
 }
 \]
 
-## 二十七、为什么它仍然满足 Markov 形式？
+### 为什么它仍然满足 Markov 形式？
 
 很多人看到：
 
 \[
-s_t=x_{<t}
+s_t=x_{\lt t}
 \]
 
 会问：
@@ -1668,9 +1657,7 @@ s_t=(x_1,\dots,x_{t-1})
 整个历史已经包含在 state 里。于是：
 
 \[
-P(s_{t+1}|s_0,a_0,\dots,s_t,a_t)
-=
-P(s_{t+1}|s_t,a_t)
+P(s_{t+1}|s_0,a_0,\dots,s_t,a_t) = P(s_{t+1}|s_t,a_t)
 \]
 
 自然成立。也就是说：
@@ -1688,7 +1675,7 @@ P(s_{t+1}|s_t,a_t)
 Transformer 做的正是：
 
 \[
-x_{<t}
+x_{\lt t}
 \rightarrow
 h_t
 \]
@@ -1696,10 +1683,10 @@ h_t
 再根据 \(h_t\) 预测：
 
 \[
-P(x_t|x_{<t})
+P(x_t|x_{\lt t})
 \]
 
-## 二十八、这时 Tokenizer 的战略意义突然变了：它在定义 Action Space
+### 这时 Tokenizer 的战略意义突然变了：它在定义 Action Space
 
 如果：
 
@@ -1737,7 +1724,7 @@ a_t=x_t
 \boxed{\text{每一步决策能够选择多大的 Macro Action}}
 \]
 
-## 二十九、Tokenizer 同时定义了第二件事：Horizon
+### Tokenizer 同时定义了第二件事：Horizon
 
 还是 `人工智能`。
 
@@ -1801,7 +1788,7 @@ H\downarrow
 H\uparrow
 \]
 
-## 三十、这和 Hierarchical RL 中 Primitive Action / Macro Action 极其相似
+### 这和 Hierarchical RL 中 Primitive Action / Macro Action 极其相似
 
 字符 `[a][r][t][i][f]...` 类似：
 
@@ -1831,7 +1818,7 @@ Subword `[artificial]`、`[intelligence]` 更接近：
 
 一步迈得小：灵活，但步数多。一步迈得大：步数少，但 action space 更大，而且内部结构被隐藏。
 
-## 三十一、这也解释了一个容易被忽略的事实：Action 会直接成为下一时刻的 State
+### 这也解释了一个容易被忽略的事实：Action 会直接成为下一时刻的 State
 
 普通控制系统中：
 
@@ -1848,17 +1835,13 @@ a_t=x_t
 直接被写入未来的 state。即：
 
 \[
-s_{t+1}
-=
-[s_t,a_t]
+s_{t+1} = [s_t,a_t]
 \]
 
 下一步：
 
 \[
-s_{t+2}
-=
-[s_t,a_t,a_{t+1}]
+s_{t+2} = [s_t,a_t,a_{t+1}]
 \]
 
 所以：
@@ -1875,12 +1858,12 @@ s_{t+2}
 
 那么后面所有推理都在条件 `17 × 6 = 92` 之上继续。这就是 autoregressive error propagation 的基本结构之一。
 
-## 三十二、SFT 和 On-policy RL 的差异，在这个状态视角下也异常清晰
+### SFT 和 On-policy RL 的差异，在这个状态视角下也异常清晰
 
 SFT 训练时：
 
 \[
-s_t^{train}=x_{<t}^{GT}
+s_t^{train}=x_{\lt t}^{GT}
 \]
 
 也就是状态来自 ground-truth trajectory。模型学习：
@@ -1892,9 +1875,7 @@ s_t^{train}=x_{<t}^{GT}
 但推理时：
 
 \[
-s_t^{test}
-=
-\hat x_{<t}
+s_t^{test} = \hat x_{\lt t}
 \]
 
 来自模型自己之前生成的 action。所以：
@@ -1921,7 +1902,7 @@ s\sim d_{\pi_\theta}
 
 因此 Tokenizer → State → Action → On-policy，这些原本看似不同的话题，其实可以被一条统一的序贯建模逻辑连接起来。
 
-## 三十三、甚至可以从这个角度重新理解 Chain-of-Thought
+### 甚至可以从这个角度重新理解 Chain-of-Thought
 
 假设模型直接做：
 
@@ -1989,7 +1970,9 @@ Reasoning length 控制：
 \boxed{\text{Test-time Computation}}
 \]
 
-## 三十四、到这里，我们终于可以回答：Token 到底是什么？
+## 第六部分：Token 的多重身份
+
+### 到这里，我们终于可以回答：Token 到底是什么？
 
 如果从语言学看：
 
@@ -2023,7 +2006,7 @@ Reasoning length 控制：
 
 于是所谓 Token，其实是多个抽象层的交叉点。这也是为什么围绕 Tokenizer 的争论经常鸡同鸭讲：大家讨论的根本不是同一个层级。
 
-## 三十五、从「战略—战役—战术」看 Tokenizer，会清晰很多
+### 从「战略—战役—战术」看 Tokenizer，会清晰很多
 
 我们可以重新整理整个问题。
 
@@ -2049,7 +2032,9 @@ Reasoning length 控制：
 
 这才是战略问题。
 
-## 三十六、然后历史开始出现一个有意思的反转：也许根本不需要传统 Tokenizer
+## 第七部分：动态计算与多模态统一
+
+### 然后历史开始出现一个有意思的反转：也许根本不需要传统 Tokenizer
 
 既然所有文本最终都是 bytes，那么最自然的问题就是：
 
@@ -2078,7 +2063,7 @@ N_{\text{subword}}
 \boxed{\text{计算粒度}}
 \]
 
-## 三十七、BLT 的关键突破：为什么 Token Boundary 必须在训练前固定？
+### BLT 的关键突破：为什么 Token Boundary 必须在训练前固定？
 
 传统 BPE：
 
@@ -2130,7 +2115,7 @@ BLT 把 dynamically sized patches 作为主要计算单位，并通过 entropy �
 }
 \]
 
-## 三十八、这不是文本领域独有的变化，多模态几乎走了一模一样的路
+### 这不是文本领域独有的变化，多模态几乎走了一模一样的路
 
 现在把视角从文字移到图片。一张图片：
 
@@ -2152,7 +2137,7 @@ ViT 给出了一个极其简单甚至有点「暴力」的答案：切格子。
 
 ViT 的原论文正是直接把 image patches 当作 sequence 输入 Transformer。
 
-## 三十九、但是：世界真的天然由 16×16 小方块组成吗？
+### 但是：世界真的天然由 16×16 小方块组成吗？
 
 当然不是。所以：
 
@@ -2200,7 +2185,7 @@ N\downarrow
 
 你会发现，这和 `character vs word` 几乎是同一个问题。
 
-## 四十、但 ViT 的 Patch 仍然不是真正意义上的「离散 Token」
+### 但 ViT 的 Patch 仍然不是真正意义上的「离散 Token」
 
 文本 Token：
 
@@ -2232,7 +2217,7 @@ h_i\in\mathbb R^d
 
 很多多模态讨论里会把两者混在一起。LLaVA、CLIP+LLM 这类架构中的 visual tokens，大量属于 continuous embeddings，而不是 vocabulary IDs。
 
-## 四十一、VQ-VAE 才真正让图片获得了类似「词表」的东西
+### VQ-VAE 才真正让图片获得了类似「词表」的东西
 
 VQ-VAE 的关键思想，是加入：
 
@@ -2256,10 +2241,7 @@ E(x)=z
 对于每个 latent \(z_i\)，寻找最近的 code：
 
 \[
-k_i
-=
-\arg\min_k
-\|z_i-e_k\|^2
+k_i = \arg\min_k \|z_i-e_k\|^2
 \]
 
 于是：
@@ -2286,7 +2268,7 @@ k_i\in\{1,\dots,K\}
 
 形式上已经和文字完全一样。
 
-## 四十二、这里要再次警惕人类的「过度解释」
+### 这里要再次警惕人类的「过度解释」
 
 假设我们观察 `visual token 327`，发现它经常出现在 `grass` 附近。很容易说：
 
@@ -2316,7 +2298,7 @@ P(\text{grass-like patterns}|k=327)
 }
 \]
 
-## 四十三、文本和视觉 Tokenizer 的一个重大区别：文本通常要求无损，视觉天然允许有损
+### 文本和视觉 Tokenizer 的一个重大区别：文本通常要求无损，视觉天然允许有损
 
 文本：
 
@@ -2362,7 +2344,7 @@ D(T(I))=\hat I
 
 三个目标。而且 Pixel Fidelity 和 Semantic Utility 并不完全一致。
 
-## 四十四、这就出现了视觉领域一个非常核心的矛盾：理解和生成，到底需要同一种 Token 吗？
+### 这就出现了视觉领域一个非常核心的矛盾：理解和生成，到底需要同一种 Token 吗？
 
 做 image understanding 时，重要的是：
 
@@ -2396,7 +2378,7 @@ D(T(I))=\hat I
 
 这也是为什么多模态统一并不像「把所有东西都强行变成一个 Tokenizer」那么简单。
 
-## 四十五、但是统一 Next-Token Prediction 仍然具有巨大的诱惑
+### 但是统一 Next-Token Prediction 仍然具有巨大的诱惑
 
 因为一旦 Text、Image、Video、Audio 都可以变成：
 
@@ -2407,13 +2389,7 @@ D(T(I))=\hat I
 那么整个训练目标可以统一成：
 
 \[
-\boxed{
-\mathcal L
-=
--\sum_t
-\log
-P_\theta(s_t|s_{<t})
-}
+\boxed{ \mathcal L = -\sum_t \log P_\theta(s_t|s_{\lt t}) }
 \]
 
 这正是 Emu3 一类工作的核心吸引力。Emu3 将 text、image 和 video tokenize 到离散空间，然后从头训练单一 Transformer，仅依赖 next-token prediction，同时完成生成和感知任务。
@@ -2424,7 +2400,7 @@ P_\theta(s_t|s_{<t})
 \boxed{\text{Sequence}}
 \]
 
-## 四十六、视觉 Tokenizer 的质量甚至可能决定 Autoregressive Vision 能不能成立
+### 视觉 Tokenizer 的质量甚至可能决定 Autoregressive Vision 能不能成立
 
 MAGVIT-v2 的标题非常直接：**Language Model Beats Diffusion: Tokenizer is Key to Visual Generation**
 
@@ -2442,7 +2418,7 @@ MAGVIT-v2 构建了能够同时服务 image 和 video 的 visual tokenizer，并
 
 它决定：主模型究竟在什么表示空间里学习。
 
-## 四十七、然后视觉领域也开始走向「动态 Token 数」
+### 然后视觉领域也开始走向「动态 Token 数」
 
 传统 \(256\times256\) image，无论内容是什么，可能都固定：
 
@@ -2487,7 +2463,7 @@ N\uparrow
 
 这和 BLT 几乎形成了完美呼应。
 
-## 四十八、文本 Tokenizer 与视觉 Tokenizer，正在走向同一个终点
+### 文本 Tokenizer 与视觉 Tokenizer，正在走向同一个终点
 
 文本的发展：
 
@@ -2537,7 +2513,9 @@ Variable-length Token
 
 > **这部分信息值得多少计算？**
 
-## 四十九、所以我们需要重新理解整个 Tokenizer 的技术史
+## 第八部分：技术史、哲学与未来
+
+### 所以我们需要重新理解整个 Tokenizer 的技术史
 
 如果按照算法名字看，历史很乱：
 
@@ -2597,7 +2575,7 @@ FlexTok
 
 模型开始问：不同区域为什么一定获得一样细的计算粒度？
 
-## 五十、如果再向上抽象，可以看到三种完全不同的 Token 世界观
+### 如果再向上抽象，可以看到三种完全不同的 Token 世界观
 
 第一种，可以称为：
 
@@ -2631,7 +2609,7 @@ Token 最重要的意义是：它是进入昂贵模型主体的一次计算机�
 
 BLT、动态视觉 Tokenizer 尤其体现了这种变化。
 
-## 五十一、这也是为什么「一个 Token 是不是一个完整的词」越来越不是最重要的问题
+### 这也是为什么「一个 Token 是不是一个完整的词」越来越不是最重要的问题
 
 例如 `人工智能`。如果整体变成一个 Token：人类觉得很符合语义，工程上：
 
@@ -2650,16 +2628,12 @@ N\downarrow
 所以并不存在：
 
 \[
-\boxed{
-\text{Human Interpretability}
-=
-\text{Machine Utility}
-}
+\boxed{ \text{Human Interpretability} = \text{Machine Utility} }
 \]
 
 Haslett 的中文实验恰恰提供了一个非常漂亮的证据：人类看起来怪异的多 Token / byte-level 切分，有时候反而暴露了模型可以利用的信息。
 
-## 五十二、因此一个好的 Tokenizer 至少需要从五个不同维度评价
+### 因此一个好的 Tokenizer 至少需要从五个不同维度评价
 
 最底层是：
 
@@ -2711,7 +2685,7 @@ D(T(x))=x
 \boxed{\text{并不保证同向}}
 \]
 
-## 五十三、再往哲学层走一步：世界到底有没有天然的「基本单位」？
+### 再往哲学层走一步：世界到底有没有天然的「基本单位」？
 
 这是整个问题最有意思的地方。
 
@@ -2733,7 +2707,7 @@ D(T(x))=x
 
 把原始世界转换成某个计算坐标系。
 
-## 五十四、换句话说：Tokenizer 不只是在表示世界，它也在规定模型能够怎样操作世界
+### 换句话说：Tokenizer 不只是在表示世界，它也在规定模型能够怎样操作世界
 
 如果 `人工智能` 永远是一个不可拆的 Token：
 
@@ -2765,7 +2739,7 @@ e_{\text{AI}}
 
 Tokenization 本身就是一种归纳偏置。
 
-## 五十五、到这里，我们可以给 Tokenizer 一个比「分词器」更准确的定义
+### 到这里，我们可以给 Tokenizer 一个比「分词器」更准确的定义
 
 传统定义：
 
@@ -2813,18 +2787,10 @@ T:x_{\text{raw}}
 所以我更愿意把 Tokenizer 定义成：
 
 \[
-\boxed{
-\text{Tokenizer}
-=
-\text{Representation Interface}
-+
-\text{Compression Interface}
-+
-\text{Compute Interface}
-}
+\boxed{ \text{Tokenizer} = \text{Representation Interface} + \text{Compression Interface} + \text{Compute Interface} }
 \]
 
-## 五十六、这也解释了为什么 Tokenizer 看似是「小技术」，其实处在整个大模型最底层的战略位置
+### 这也解释了为什么 Tokenizer 看似是「小技术」，其实处在整个大模型最底层的战略位置
 
 我们今天经常讨论：
 
@@ -2861,7 +2827,7 @@ World Model
 
 那么后面再强大的 Transformer，都需要在这个坐标系之上付出代价。
 
-## 五十七、所以 Tokenizer 的发展史，其实也是 AI 对「基本计算单位」认识不断变化的历史
+### 所以 Tokenizer 的发展史，其实也是 AI 对「基本计算单位」认识不断变化的历史
 
 1950 年代，人类说：基本单位就是词、语法和意义。
 
@@ -2891,7 +2857,7 @@ BLT 和 FlexTok 又进一步说：连 Token boundary、Token 数量都未必应�
 }
 \]
 
-## 五十八、如果要再向未来推一步，我认为真正的问题已经不是「BPE 会不会被淘汰」
+### 如果要再向未来推一步，我认为真正的问题已经不是「BPE 会不会被淘汰」
 
 这个问题太小了。真正的问题是：
 
@@ -2952,7 +2918,7 @@ aaaaaaaaaaaaaaaa
 
 可能才是更加重要的长期方向。
 
-## 五十九、这时候 Tokenizer、Reasoning 与 Agent 甚至开始出现统一解释
+### 这时候 Tokenizer、Reasoning 与 Agent 甚至开始出现统一解释
 
 Tokenizer 在最底层决定：
 
@@ -2996,7 +2962,7 @@ Agent Loop 则进一步决定：
 
 问题最底层的一种体现。
 
-## 六十、回到最开始的问题：大模型眼里的世界，到底由什么组成？
+### 回到最开始的问题：大模型眼里的世界，到底由什么组成？
 
 答案已经发生了很多次变化。
 
