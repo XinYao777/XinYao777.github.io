@@ -26,17 +26,21 @@
         margin: 0;
         z-index: 10;
     }
-    details.toc summary {
-        pointer-events: none;
-    }
-    details.toc::details-content {
-        height: auto !important;
-        opacity: 1 !important;
-        overflow: visible;
-    }
     details.toc .inner {
         margin: 0 1.2rem;
     }
 }
 </style>
+<script>
+(function () {
+    var mq = window.matchMedia('(min-width: 1400px)');
+    function syncToc() {
+        var toc = document.querySelector('details.toc');
+        if (toc && mq.matches) { toc.open = true; }
+    }
+    if (document.readyState !== 'loading') { syncToc(); }
+    else { document.addEventListener('DOMContentLoaded', syncToc); }
+    mq.addEventListener('change', syncToc);
+})();
+</script>
 
