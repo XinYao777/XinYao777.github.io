@@ -12,3 +12,31 @@
         throwOnError: false
     });"></script>
 {{ end }}
+
+{{/* 宽屏下把文章目录固定为左侧边栏；窄屏/移动端回退为默认可折叠目录 */}}
+<style>
+@media screen and (min-width: 1400px) {
+    details.toc {
+        position: fixed;
+        top: 6rem;
+        left: calc((100vw - (var(--main-width) + var(--gap) * 2)) / 2 - 300px);
+        width: 280px;
+        max-height: calc(100vh - 9rem);
+        overflow-y: auto;
+        margin: 0;
+        z-index: 10;
+    }
+    details.toc summary {
+        pointer-events: none;
+    }
+    details.toc::details-content {
+        height: auto !important;
+        opacity: 1 !important;
+        overflow: visible;
+    }
+    details.toc .inner {
+        margin: 0 1.2rem;
+    }
+}
+</style>
+
