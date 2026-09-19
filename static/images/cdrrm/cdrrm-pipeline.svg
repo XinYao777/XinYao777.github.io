@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="700" viewBox="0 0 900 700" font-family="'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Lane 1: offline data construction -->
+  <rect x="10" y="10" width="880" height="240" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <rect x="10" y="10" width="880" height="34" rx="10" fill="#2563eb"/>
+  <rect x="10" y="34" width="880" height="10" fill="#2563eb"/>
+  <text x="450" y="32" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">① 离线数据构建（Teacher LLM：Qwen3-235B-Instruct）</text>
+
+  <rect x="20" y="60" width="260" height="140" rx="8" fill="#ffffff" stroke="#bfdbfe"/>
+  <text x="150" y="85" text-anchor="middle" fill="#1d4ed8" font-size="13" font-weight="700">1) 对比剖析 Contrastive Profiling</text>
+  <rect x="85" y="95" width="130" height="22" rx="11" fill="#3b82f6"/>
+  <text x="150" y="110" text-anchor="middle" fill="#ffffff" font-size="11">System Prompt P1</text>
+  <text x="35" y="140" fill="#374151" font-size="12">分别对 y_c 与 y_r 做多维度诊断</text>
+  <text x="35" y="160" fill="#374151" font-size="12">→ 证据锚定的画像 Γ_c、Γ_r</text>
+  <text x="35" y="180" fill="#6b7280" font-size="11">（claim + evidence + instruction_anchor）</text>
+
+  <line x1="280" y1="130" x2="316" y2="130" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="320" y="60" width="260" height="140" rx="8" fill="#ffffff" stroke="#bfdbfe"/>
+  <text x="450" y="85" text-anchor="middle" fill="#1d4ed8" font-size="13" font-weight="700">2) Rubric 合成 Rubric Synthesis</text>
+  <rect x="385" y="95" width="130" height="22" rx="11" fill="#8b5cf6"/>
+  <text x="450" y="110" text-anchor="middle" fill="#ffffff" font-size="11">System Prompt P2</text>
+  <text x="335" y="140" fill="#374151" font-size="12">输入 x + 画像对比 Δ(Γ_c, Γ_r)</text>
+  <text x="335" y="160" fill="#374151" font-size="12">→ 精简判别式 Rubric R(x)</text>
+  <text x="335" y="180" fill="#6b7280" font-size="11">（hard_rules + principles + 自洽校验）</text>
+
+  <line x1="580" y1="130" x2="616" y2="130" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="620" y="60" width="260" height="140" rx="8" fill="#ffffff" stroke="#bfdbfe"/>
+  <text x="750" y="85" text-anchor="middle" fill="#1d4ed8" font-size="13" font-weight="700">3) 一致性过滤 Consistency Filtering</text>
+  <rect x="685" y="95" width="130" height="22" rx="11" fill="#ea580c"/>
+  <text x="750" y="110" text-anchor="middle" fill="#ffffff" font-size="11">Judge P4+T4'</text>
+  <text x="635" y="140" fill="#374151" font-size="12">在 R(x) 约束下重判偏好对</text>
+  <text x="635" y="160" fill="#374151" font-size="12">→ 仅保留预测=真值标签</text>
+  <text x="635" y="180" fill="#1d4ed8" font-size="12" font-weight="700">→ D_rubric（3k 样本）</text>
+
+  <text x="450" y="228" text-anchor="middle" fill="#64748b" font-size="12">产出高质量 Rubric 监督数据，供训练阶段使用</text>
+
+  <!-- Lane 2: training -->
+  <rect x="10" y="270" width="880" height="214" rx="10" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+  <rect x="10" y="270" width="880" height="34" rx="10" fill="#059669"/>
+  <rect x="10" y="294" width="880" height="10" fill="#059669"/>
+  <text x="450" y="292" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">② 模型训练（SFT，Qwen3-8B / 14B）</text>
+
+  <rect x="60" y="330" width="360" height="130" rx="8" fill="#ffffff" stroke="#a7f3d0"/>
+  <text x="240" y="352" text-anchor="middle" fill="#047857" font-size="13" font-weight="700">4) Rubric Generator 训练</text>
+  <rect x="160" y="362" width="160" height="22" rx="11" fill="#0d9488"/>
+  <text x="240" y="377" text-anchor="middle" fill="#ffffff" font-size="11">System P3 + User T3'</text>
+  <text x="75" y="405" fill="#374151" font-size="12">输入 (x, y_c, y_r) → 自回归预测 R(x)</text>
+  <text x="75" y="425" fill="#374151" font-size="12">在 D_rubric 上做 NLL 训练</text>
+  <text x="75" y="445" fill="#047857" font-size="12">→ 自动化生成上下文相关 Rubric</text>
+
+  <line x1="420" y1="395" x2="456" y2="395" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="460" y="330" width="360" height="130" rx="8" fill="#ffffff" stroke="#a7f3d0"/>
+  <text x="640" y="352" text-anchor="middle" fill="#047857" font-size="13" font-weight="700">5) Judge Model 训练</text>
+  <rect x="560" y="362" width="160" height="22" rx="11" fill="#ea580c"/>
+  <text x="640" y="377" text-anchor="middle" fill="#ffffff" font-size="11">System P4 + User T4'</text>
+  <text x="475" y="405" fill="#374151" font-size="12">生成器产 R(x) → Teacher 用 P4 生成理由 J(x)</text>
+  <text x="475" y="425" fill="#374151" font-size="12">另取 3k 样本 SFT</text>
+  <text x="475" y="445" fill="#047857" font-size="12">→ 先写理由再输出 Winner</text>
+
+  <!-- Lane 3: inference -->
+  <rect x="10" y="504" width="880" height="184" rx="10" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+  <rect x="10" y="504" width="880" height="34" rx="10" fill="#d97706"/>
+  <rect x="10" y="528" width="880" height="10" fill="#d97706"/>
+  <text x="450" y="526" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">③ 推理（可冻结 base 模型直接使用）</text>
+
+  <rect x="60" y="556" width="360" height="110" rx="8" fill="#ffffff" stroke="#fde68a"/>
+  <text x="240" y="578" text-anchor="middle" fill="#b45309" font-size="13" font-weight="700">6) 生成 Rubric</text>
+  <rect x="160" y="588" width="160" height="22" rx="11" fill="#0d9488"/>
+  <text x="240" y="603" text-anchor="middle" fill="#ffffff" font-size="11">System P3 + User T3'</text>
+  <text x="75" y="632" fill="#374151" font-size="12">对新指令-回答对生成 R(x)</text>
+  <text x="75" y="652" fill="#6b7280" font-size="11">（无需微调的冻结模型也可用）</text>
+
+  <line x1="420" y1="610" x2="456" y2="610" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="460" y="556" width="360" height="110" rx="8" fill="#ffffff" stroke="#fde68a"/>
+  <text x="640" y="578" text-anchor="middle" fill="#b45309" font-size="13" font-weight="700">7) 判断 Winner</text>
+  <rect x="560" y="588" width="160" height="22" rx="11" fill="#ea580c"/>
+  <text x="640" y="603" text-anchor="middle" fill="#ffffff" font-size="11">System P4 + User T4'</text>
+  <text x="475" y="632" fill="#374151" font-size="12">按 Hard Rules 逐条核对 A/B</text>
+  <text x="475" y="652" fill="#6b7280" font-size="11">→ Analysis + Final Judgment + Winner</text>
+</svg>
