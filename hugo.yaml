@@ -69,6 +69,10 @@ menu:
       name: 文章
       url: /posts/
       weight: 10
+    - identifier: paper-reading
+      name: 论文阅读
+      url: /posts/paper-reading/
+      weight: 15
     - identifier: archives
       name: 归档
       url: /archives/
