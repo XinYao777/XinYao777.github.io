@@ -19,7 +19,7 @@ $$
 Student 自己 rollout，然后 Teacher 在 Student 实际访问到的 prefix 上给出 token distribution：
 
 $$
-\pi_T(\cdot \mid x, y_{<t})
+\pi_T(\cdot \mid x, y_{\lt t})
 $$
 
 最后直接做 Teacher–Student 的 distribution matching。
@@ -137,7 +137,7 @@ $$
 =
 -\sum_t
 \log
-\pi_\theta(y_{T,t} \mid x, y_{T,<t})
+\pi_\theta(y_{T,t} \mid x, y_{T,\lt t})
 $$
 
 这类方法可以叫：
@@ -174,13 +174,13 @@ Sequence Distillation 有一个经典问题。
 训练时，Student 看到的是 Teacher prefix：
 
 $$
-s_t^{T} = (x, y_{T,<t})
+s_t^{T} = (x, y_{T,\lt t})
 $$
 
 但推理时，Student 看到的是自己的 prefix：
 
 $$
-s_t^{S} = (x, y_{S,<t})
+s_t^{S} = (x, y_{S,\lt t})
 $$
 
 于是：
@@ -202,7 +202,7 @@ $$
 然后在：
 
 $$
-s_t = (x, y_{S,<t})
+s_t = (x, y_{S,\lt t})
 $$
 
 上比较：
