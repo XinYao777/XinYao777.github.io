@@ -5,7 +5,7 @@ draft: false
 tags: ["OPD", "蒸馏", "强化学习", "Rubric", "后训练"]
 categories: ["AI 技术思考"]
 math: true
-summary: "越来越多方法都被称为 On-Policy Distillation，但它们可能分别使用 teacher logits、rubric、judge、reward 或 step-level supervision。本文不再按论文命名分类，而是从 rollout distribution、supervision signal、credit assignment、objective 和 gradient estimator 五个维度重新拆解 OPD。"
+summary: "越来越多方法都被称为 On-Policy Distillation，但它们可能分别使用 teacher logits、rubric、judge、reward 或 step-level supervision。本文不再按论文命名分类，而是从 rollout distribution、supervision signal、supervision construction、credit assignment、objective 和 gradient estimator 六个维度重新拆解 OPD。"
 ---
 
 最近一段时间，On-Policy Distillation（OPD）开始变成一个越来越宽泛的词。
@@ -50,6 +50,8 @@ $$
 \times
 \text{Supervision Signal}
 \times
+\text{Supervision Construction}
+\times
 \text{Credit Assignment}
 \times
 \text{Objective}
@@ -60,7 +62,7 @@ $$
 
 一句话概括：
 
-> **On-policy 回答样本从哪里来；Distillation 回答知识从哪里来；SFT / KL / RL 回答模型怎么学；Credit Assignment 回答这个信号应该作用到哪里。**
+> **On-policy 回答样本从哪里来；Distillation 回答知识从哪里来；Supervision Construction 回答监督是否依赖当前 policy 动态生成；SFT / KL / RL 回答模型怎么学；Credit Assignment 回答这个信号应该作用到哪里。**
 
 这几个概念本来就不是一回事。
 
@@ -386,7 +388,136 @@ $$
 
 ---
 
-## 六、这样再看 ROPD：它更像 Teacher-guided On-policy RL
+## 六、一个容易漏掉的新轴：监督信号本身是不是 On-policy 的？
+
+前面的五个维度仍然漏掉了一个重要差异。
+
+考虑两个方法：
+
+### Static Rubric RL
+
+先离线构造 rubric：
+
+$
+\mathcal R_x
+=
+G(x, y^+, y^-)
+$
+
+或者：
+
+$
+\mathcal R_x
+=
+G(x, y_{\mathrm{ref}})
+$
+
+训练时再让当前 Student rollout：
+
+$
+Y_S^t \sim \pi_{\theta_t}(\cdot \mid x)
+$
+
+并使用固定 rubric：
+
+$
+R_i^t
+=
+V(x,y_i^t,\mathcal R_x)
+$
+
+最后做 GRPO。
+
+### Policy-conditioned Rubric RL
+
+rubric 本身也依赖当前 policy 的 rollout：
+
+$
+Y_S^t
+\sim
+\pi_{\theta_t}(\cdot \mid x)
+$
+
+$
+\mathcal R_x^t
+=
+G(x,Y_T,Y_S^t)
+$
+
+然后：
+
+$
+R_i^t
+=
+V(x,y_i^t,\mathcal R_x^t)
+$
+
+再做 GRPO。
+
+这两种方法可能拥有完全相同的：
+
+- rollout distribution；
+- supervision type：都是 rubric；
+- credit assignment：都是 sequence-level；
+- objective：都是 expected reward；
+- optimizer：都是 GRPO。
+
+如果只使用原来的五维表示，它们甚至会被写成同一个算法。
+
+但它们显然不是一回事。
+
+真正的差异是：
+
+$
+\boxed{
+\text{Supervision Construction}
+=
+\text{Static}
+\quad\text{or}\quad
+\text{Policy-conditioned}
+}
+$
+
+也就是不仅要问：
+
+> **监督信号是什么？**
+
+还要问：
+
+> **这个监督信号是在训练前固定好的，还是根据当前 Student 正在犯的错误重新构造的？**
+
+这可以进一步写成：
+
+$
+\Phi_t
+=
+G(x,\pi_{\theta_t})
+$
+
+如果：
+
+$
+\frac{\partial \Phi_t}{\partial \pi_{\theta_t}}
+\neq 0
+$
+
+这里不是说真的对 Rubricator 求梯度，而是表示在数据依赖关系上，监督规格会随着当前 policy 的行为发生变化。
+
+因此，真正完整的拆解应该增加一条独立轴：
+
+$
+\boxed{
+\text{Supervision Signal}
+\neq
+\text{Supervision Construction}
+}
+$
+
+前者回答“Rubric / Reward / Logits / Critique 是什么”，后者回答“它是怎么来的、是否随 policy 改变”。
+
+---
+
+## 七、这样再看 ROPD：它更像 Teacher-guided On-policy RL
 
 2026 年的 [Rubric-based On-policy Distillation](https://arxiv.org/abs/2605.07396) 很有代表性。
 
@@ -465,9 +596,259 @@ $$
 
 这就是我认为今天 “Black-box OPD” 这个词容易制造误解的地方。
 
+但继续往下拆，会发现 ROPD 真正有价值的地方甚至不是“Rubric + GRPO”。
+
+因为类似的 RubricRL 范式已经可以写成：
+
+$
+(x,y^+,y^-)
+\xrightarrow{\text{Rubricator}}
+\mathcal R_x
+\xrightarrow{\text{Verifier}}
+R(x,y)
+\xrightarrow{\text{GRPO}}
+\pi_\theta
+$
+
+如果 rubric 在 RL 开始之前已经生成好，那么它属于：
+
+$
+\boxed{
+\text{Static Rubric RL}
+}
+$
+
+ROPD 的关键变化是把 contrast 的弱侧替换成当前 policy：
+
+$
+\boxed{
+\mathcal R_x^t
+=
+G(
+x,
+\underbrace{Y_T}_{\text{fixed strong side}},
+\underbrace{Y_S^t}_{\text{moving weak side}}
+)
+}
+$
+
+其中：
+
+$
+Y_S^t
+\sim
+\pi_{\theta_t}(\cdot\mid x)
+$
+
+因此，它真正应该强调的不是：
+
+$
+\text{Rubric}
++
+\text{GRPO}
+$
+
+而是：
+
+$
+\boxed{
+\text{Rubric conditioned on current policy failures}
+}
+$
+
+这可以看成把固定的 chosen-rejected contrast：
+
+$
+R_x
+=
+G(x,y^+,y^-)
+$
+
+改成：
+
+$
+R_x^t
+=
+G(x,Y_T,Y_S^t)
+$
+
+也就是：
+
+> **negative side is on-policy。**
+
+Teacher responses 本身并不要求每一步重新生成。
+
+完全可以先离线生产：
+
+$
+Y_T(x)
+=
+\{y_{T,1},\ldots,y_{T,m}\}
+$
+
+训练中不断复用。
+
+真正必须在线更新的是：
+
+$
+\boxed{
+\mathcal R_x^t
+=
+G(x,Y_T(x),Y_S^t(x))
+}
+$
+
+因为只有：
+
+$
+Y_S^t
+$
+
+反映了当前 Student 此刻正在犯什么错误。
+
+### 这是不是“Rubric 随训练持续演化”？
+
+这里还需要再严格一点。
+
+如果同一个 prompt 在训练过程中会被反复访问，那么确实可能出现：
+
+$
+\mathcal R_x^0
+\neq
+\mathcal R_x^1
+\neq
+\mathcal R_x^2
+$
+
+因为 Student 的 failure distribution 在变化。
+
+但如果训练只有一个 epoch，大多数 prompt 只被访问一次，那么它更准确的名字是：
+
+$
+\boxed{
+\text{Policy-conditioned Rubric Generation}
+}
+$
+
+而不一定是强意义上的：
+
+$
+\boxed{
+\text{Co-evolving Rubric}
+}
+$
+
+也就是说，ROPD 保证的是：
+
+> **当前这次 rubric 构造依赖当前 rollout。**
+
+它并不天然保证：
+
+> **同一个 prompt 的 rubric 会在整个训练生命周期中被持续 refresh。**
+
+这两个概念最好分开。
+
+### 代价：Rubricator 进入了 online reward loop
+
+静态 RubricRL 可以把 rubric generation 的成本全部摊到训练前：
+
+$
+\text{Offline Rubric}
+\rightarrow
+\text{Online Verifier}
+\rightarrow
+\text{RL}
+$
+
+而 ROPD 是：
+
+$
+\text{Student Rollout}
+\rightarrow
+\text{Rubricator}
+\rightarrow
+\text{Verifier}
+\rightarrow
+\text{RL}
+$
+
+Teacher response 可以 cache，但 Rubricator 无法完全 cache，因为它依赖当前 Student rollout。
+
+于是每个 rollout group 的在线成本至少包含：
+
+$
+C_{\text{online}}
+\approx
+C_{\text{rollout}}
++
+C_{\text{rubricator}}
++
+C_{\text{verifier}}
++
+C_{\text{update}}
+$
+
+如果 Rubricator / Verifier 都调用强黑盒 API，那么 wall-clock、吞吐和 API dollar cost 都可能成为主要问题。
+
+因此，一个更实用的版本可能不是“每次从零生成完整 rubric”，而是：
+
+$
+\boxed{
+\mathcal R_x^t
+=
+\mathcal R_x^{\text{base}}
++
+\Delta\mathcal R_x^t
+}
+$
+
+其中 base rubric 离线生成：
+
+$
+\mathcal R_x^{\text{base}}
+=
+G(x,Y_T)
+$
+
+描述长期稳定的任务约束、关键知识点和正确性要求；
+
+动态部分只针对当前 rollout 暴露出的 failure：
+
+$
+\Delta\mathcal R_x^t
+=
+G(
+\mathcal R_x^{\text{base}},
+Y_T,
+Y_S^t
+)
+$
+
+这样 supervision engineering 就从：
+
+> 每一步重新写一套评分标准
+
+变成：
+
+> **固定任务 rubric + 少量 on-policy failure delta。**
+
+这也给出了一个很自然的新研究问题：
+
+$
+\boxed{
+\text{Static task specification}
++
+\text{Dynamic failure specification}
+}
+$
+
+到底应该各占多少？
+
 ---
 
-## 七、如果什么都能叫 OPD，OPD 就不再是一种算法
+
+
+## 八、如果什么都能叫 OPD，OPD 就不再是一种算法
 
 如果我们把 OPD 定义放宽为：
 
@@ -511,7 +892,7 @@ $$
 
 ---
 
-## 八、第四个容易被忽略的轴：Credit Assignment
+## 九、Credit Assignment：监督到底应该归因给谁？
 
 即使已经知道：
 
@@ -579,7 +960,7 @@ $$
 
 ---
 
-## 九、Step-level 也没有想象中简单：跨 rollout 怎么对齐？
+## 十、Step-level 也没有想象中简单：跨 rollout 怎么对齐？
 
 SRaR 进一步暴露了一个有意思的问题。
 
@@ -670,7 +1051,7 @@ $$
 
 ---
 
-## 十、MiniLLM 说明：Objective 和 Optimizer 也不能混为一谈
+## 十一、MiniLLM 说明：Objective 和 Optimizer 也不能混为一谈
 
 另一个很常见的问题是：
 
@@ -719,7 +1100,7 @@ $$
 
 ---
 
-## 十一、我更喜欢的统一表示
+## 十二、我更喜欢的统一表示
 
 以后看到任何一个后训练方法，我更愿意先把论文名拿掉，然后写成：
 
@@ -730,6 +1111,7 @@ $$
 (
 q_{\text{rollout}},
 \Phi,
+\Psi,
 C,
 J,
 G
@@ -740,10 +1122,41 @@ $$
 其中：
 
 - $q_{\text{rollout}}$：谁产生训练 trajectory；
-- $\Phi$：监督信息是什么；
+- $\Phi$：监督信号的类型是什么；
+- $\Psi$：监督信号如何构造，是否依赖当前 policy；
 - $C$：credit assignment 粒度与方式；
 - $J$：最终优化目标；
 - $G$：gradient estimator / policy update。
+
+这里新加入的 $\Psi$ 非常重要。
+
+例如两个方法都可能是：
+
+$$
+\Phi=\text{Rubric}
+$$
+
+但一个是：
+
+$$
+\Psi
+=
+G(x,y^+,y^-)
+$$
+
+训练前固定；
+
+另一个是：
+
+$$
+\Psi_t
+=
+G(x,Y_T,Y_S^t)
+$$
+
+随当前 Student rollout 改变。
+
+如果不把这条轴单独拿出来，它们在方法分类中会被错误地合并。
 
 例如：
 
@@ -753,6 +1166,7 @@ $$
 (
 \pi_T,
 \text{Teacher Response},
+\text{Offline Teacher Generation},
 \text{Token CE},
 \text{MLE},
 \text{Backprop}
@@ -765,6 +1179,7 @@ $$
 (
 \pi_S,
 \text{Teacher Logits},
+\text{On-policy Prefix-conditioned},
 \text{Token},
 \text{KL},
 \text{Direct Gradient}
@@ -777,9 +1192,23 @@ $$
 (
 \pi_S,
 \text{Teacher LogProb},
+\text{On-policy Trajectory-conditioned},
 \text{Reward-to-go},
 \text{Sequence Reverse KL},
 \text{Policy Gradient}
+)
+$$
+
+### Static RubricRL / RaR-style RL
+
+$$
+(
+\pi_S,
+\text{Rubric},
+\text{Offline / Fixed Rubric},
+\text{Sequence},
+\text{Expected Reward},
+\text{GRPO}
 )
 $$
 
@@ -788,10 +1217,11 @@ $$
 $$
 (
 \pi_S,
-\text{Teacher Rubric},
+\text{Teacher-derived Rubric},
+\text{Policy-conditioned Rubric},
 \text{Sequence},
 \text{Expected Reward},
-\text{GRPO-style RL}
+\text{GRPO}
 )
 $$
 
@@ -801,6 +1231,7 @@ $$
 (
 \pi_S,
 \text{Rubric Judge},
+\text{Rubric-conditioned Step Attribution},
 \text{Step},
 \text{Expected Reward},
 \text{GRPO-style RL}
@@ -813,6 +1244,7 @@ $$
 (
 \pi_S\text{-visited state},
 \text{Teacher Step},
+\text{On-policy State-conditioned},
 \text{Step},
 \text{MLE},
 \text{Teacher Forcing}
@@ -821,9 +1253,27 @@ $$
 
 这张表比继续发明一个新的 “xxx-OPD” 名字更有解释力。
 
+尤其是加入 $\Psi$ 之后，终于可以把：
+
+$$
+\boxed{
+\text{on-policy data}
+}
+$$
+
+和：
+
+$$
+\boxed{
+\text{on-policy supervision construction}
+}
+$$
+
+分开讨论。
+
 ---
 
-## 十二、Black-box Teacher 的真正演进：从答案生成器到训练信号生成器
+## 十三、Black-box Teacher 的真正演进：从答案生成器到训练信号生成器
 
 如果只讨论黑盒 API 的利用方式，我觉得技术路线其实很清楚。
 
@@ -907,7 +1357,7 @@ $$
 
 ---
 
-## 十三、真正值得研究的可能不是 OPD，而是 Supervision Engineering
+## 十四、真正值得研究的可能不是 OPD，而是 Supervision Engineering
 
 如果已经有一个很强的 Teacher API，那么同样的调用预算可以购买不同类型的监督：
 
@@ -977,7 +1427,7 @@ $$
 
 ---
 
-## 十四、On-policy 的真正价值：把监督预算花在 Student 真正访问的地方
+## 十五、On-policy 的真正价值：把监督预算花在 Student 真正访问的地方
 
 On-policy 为什么重要？
 
@@ -1019,7 +1469,7 @@ $$
 
 ---
 
-## 十五、结语：不要再问“这是不是 OPD”
+## 十六、结语：不要再问“这是不是 OPD”
 
 OPD 这个词正在经历一个典型的术语膨胀过程。
 
@@ -1049,13 +1499,14 @@ $$
 
 但一旦采用这个定义，OPD 就已经不是一个具体算法，而是一类训练范式。
 
-此时真正应该回答的是五个问题：
+此时真正应该回答的是六个问题：
 
 1. **Rollout 从哪里来？**
 2. **Teacher 提供什么监督信号？**
-3. **这个信号被归因到 sequence、step 还是 token？**
-4. **真正优化的 objective 是什么？**
-5. **通过什么 gradient estimator / optimizer 更新参数？**
+3. **监督信号如何构造：训练前固定，还是依赖当前 policy 动态生成？**
+4. **这个信号被归因到 sequence、step 还是 token？**
+5. **真正优化的 objective 是什么？**
+6. **通过什么 gradient estimator / optimizer 更新参数？**
 
 这五件事情讲清楚以后：
 
@@ -1070,6 +1521,8 @@ $$
 \text{Data Distribution}
 \times
 \text{Supervision Signal}
+\times
+\text{Supervision Construction}
 \times
 \text{Credit Assignment}
 \times
