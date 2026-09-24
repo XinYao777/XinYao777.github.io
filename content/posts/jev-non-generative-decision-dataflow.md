@@ -86,7 +86,7 @@ score 展开成 4 个 leaf，每个 Candidate 只放该级描述（**不写序�
 |---|---|---|
 | choice | 候选 `{名:描述}` | 每候选概率 + `choice`（最高者） |
 | boolean | 一句判断 | `{false,true}` 概率 + `p_true` + `value` |
-| score | 有序等级描述 | 每级概率 + `score`（期望 $\sum i\cdot p_i$）+ `level` |
+| score | 有序等级描述 | 每级概率 + `score`（期望 `Σ i·p_i`）+ `level` |
 
 > 术语对齐：TypeSafe 官方把三原语叫 **Choice / Score / Noul**（Noul 即这里的 boolean 是非题）；NanoJev 复现里统一叫 boolean。下文沿用 NanoJev 的叫法。
 
@@ -96,11 +96,11 @@ score 展开成 4 个 leaf，每个 Candidate 只放该级描述（**不写序�
 
 **定义 leaf：** 一个 leaf = 一个 `(state, question, term)` 三元组拼成的**完整输入序列**：`State + Question` 前缀 + 该 term 的 `Candidate:` 行 + `Decision:` + `<eos>`。叫「叶子」是因为同题所有 term 共享前缀（树干），每个 term 是一条分叉，末端就是叶子。
 
-设平均每 state 有 $l$ 个 leaf，一批 M 个样本 → **$P = M\cdot l$ 个 leaf 序列**。全篇最关键的是记住这套**三层动态（ragged）结构**：
+设平均每 state 有 `l` 个 leaf，一批 M 个样本 → **`P = M·l` 个 leaf 序列**。全篇最关键的是记住这套**三层动态（ragged）结构**：
 
-- $n_i$ 逐 state 变（问题数不定）
-- $k_j$ 逐 question 变（候选数不定）
-- leaf 数 ≠ $\sum k_j$，因为 bool 只算 1 → 所以 $P \le \sum_i n_i \cdot k_{max}$
+- `n_i` 逐 state 变（问题数不定）
+- `k_j` 逐 question 变（候选数不定）
+- leaf 数 ≠ `Σ k_j`，因为 bool 只算 1 → 所以 `P ≤ Σ n_i·kmax`
 
 ## 4. 前缀共享：本该 packing，reference 先用 padding 讲清楚
 
@@ -108,7 +108,7 @@ score 展开成 4 个 leaf，每个 Candidate 只放该级描述（**不写序�
 
 reference 实现两者都没做：所有 leaf **padding 到统一 width**、每条重复算整段前缀（`prefix_sharing = False`）。这是为可读性牺牲效率，也是它明确标出的两个优化 TODO。下文按 padding 版讲。
 
-## 5. Forward：$[P, W] \to [P, hdd]$
+## 5. Forward：`[P, W]` → `[P, hdd]`
 
 ```
 tokens: [P, W]                       # W = 这批最长 leaf 长度
@@ -119,9 +119,9 @@ leaves = hidden[arange(P), lengths-1]   # [P, hdd] 取每条 leaf 的 valid last
 
 取 last token 是因为 causal 编码下最后一个位置已 attend 整条序列，是该 `(state,question,term)` 的池化表示。**到这一步，transformer 就是个把 P 条序列变成 P 个向量的特征提取器。**
 
-## 6. 关键 reshape：$P \to (N, k_{max})$
+## 6. 关键 reshape：`P` → `(N, kmax)`
 
-扁平 leaf 下标对 backbone 友好，但对**聚合**不友好：softmax 必须在**同一 question 内部**的候选之间做。所以要把 $P$ 重组成 $(\text{问题数 } N, \text{候选数 } k_{max})$：
+扁平 leaf 下标对 backbone 友好，但对**聚合**不友好：softmax 必须在**同一 question 内部**的候选之间做。所以要把 P 重组成 `(问题数 N, 候选数 kmax)`：
 
 ```python
 h     = zeros(N, kmax, hdd)
@@ -134,7 +134,7 @@ for i, ex in enumerate(examples):
     offset += n
 ```
 
-$k_{max}$ = 这批候选数的最大值，纯粹是把候选维 padding 成矩形的宽度。这里有**两套错位的 raggedness**：backbone 侧填了 $P=\sum n_i$ 个格子；valid 侧标了 $\sum|k_j|$ 个格子（bool 标 2）——二者对 bool 不一致（见 §8.2）。
+`kmax` = 这批候选数的最大值，纯粹是把候选维 padding 成矩形的宽度。这里有**两套错位的 raggedness**：backbone 侧填了 `P = Σ n_i` 个格子；valid 侧标了 `Σ |k_j|` 个格子（bool 标 2）——二者对 bool 不一致（见 §8.2）。
 
 ## 7. 唯一的预测头：一个 `[hdd, 1]`
 
@@ -184,7 +184,7 @@ z      = z.index_add(0, choice, delta)                              # 加回 bas
 - `log_k` 让头感知集合大小；`set_output` **初始化为 0** → 起点 delta≡0，等价关掉此头、不扰动 backbone；
 - 直觉：base 头知道「这个候选好不好」，set-attention 让它知道「**相对别人**好不好」。
 
-**score/bool 为何不用**：score 是有序标尺、每级独立评估，跨级注意力会破坏「移动一级只改序号」的性质，也让 $\sum i\cdot p_i$ 期望语义站不住；bool 只有 1 条 leaf，没有集合可 attend。
+**score/bool 为何不用**：score 是有序标尺、每级独立评估，跨级注意力会破坏「移动一级只改序号」的性质，也让 `Σ i·p_i` 期望语义站不住；bool 只有 1 条 leaf，没有集合可 attend。
 
 ### 8.2 bool：`[0, z]` 是 gauge fixing，不是 hack
 
