@@ -70,7 +70,16 @@ boolean 比较特别，**只展开 1 个 leaf**，候选固定就是「命题为
 …前缀（Question type: boolean）… Candidate:\nThe proposition is true.\nDecision:
 ```
 
-score 展开成 4 个 leaf，每个 Candidate 只放该级描述（**不写序号、不看相邻级**）。这个 state 一共 `3 + 1 + 4 = 8` 个 leaf。
+score 展开成 4 个 leaf，每个 Candidate 只放该级描述（**不写序号、不看相邻级**）：
+
+```
+…前缀（Question type: score）… Candidate:\n功能正常\nDecision:
+…前缀（同上）…                 Candidate:\n次要受阻有替代\nDecision:
+…前缀（同上）…                 Candidate:\n核心受阻有替代\nDecision:
+…前缀（同上）…                 Candidate:\n完全中断无替代\nDecision:
+```
+
+这个 state 一共 `3 + 1 + 4 = 8` 个 leaf。
 
 输出同样结构，每个 question 换成一个概率分布 + 直接可用的结论：
 
@@ -150,7 +159,7 @@ z = scalar(norm(h)).squeeze(-1)      # [N, kmax]，scalar = Linear(hdd, 1)
 
 | | 传统分类头 | 这里 |
 |---|---|---|
-| 输出层 | `Linear(H, num_classes)` | `Linear(H, **1**)` |
+| 输出层 | `Linear(H, num_classes)` | `Linear(H, 1)`（输出维就是 1） |
 | 类别在哪 | **固化在输出层权重里** | 作为**输入文本**喂进去 |
 | 加一个新类 / 新问题 | 改输出维度、重训 | 换一段输入 token，**啥都不动** |
 | 候选数量 | 固定 | 2–255 任意（每候选一条独立 forward 行） |
@@ -161,7 +170,7 @@ z = scalar(norm(h)).squeeze(-1)      # [N, kmax]，scalar = Linear(hdd, 1)
 - **训练「覆盖」靠数据多样性，不靠架构枚举。** 喂足够杂的 `(state, question, candidate, teacher概率)` 四元组，让那个共享标量头学会「读文本判契合度」。
 - **候选数能 2–255 任意**，因为架构里没有一个维度绑定候选数——`kmax` 只是当前 batch 的 padding 宽度，不是学出来的参数。
 
-这就是全篇最该记住的一句：**把标签空间从输出层搬进输入，分类就从「固定 N 类」变成了「开放、任意 question / 任意候选」。** 一个 0.6B 底座 + 一个 `[hdd,1]` 就能服务四个游戏的所有决策。
+这就是全篇最该记住的一句：**把标签空间从输出层搬进输入，分类就从「固定 N 类」变成了「开放、任意 question / 任意候选」。** 一个 Qwen3-0.6B 底座（`hdd = 1024`）+ 一个 `[hdd,1]` 就能服务四个游戏（Maze / Snake / Basic / PredictPosition）的所有决策。
 
 ## 8. 按 qtype 做 readout
 
@@ -221,7 +230,7 @@ loss = -(target * logits.log_softmax(-1)).sum(-1)   # 无效格 target=0，不�
 - **软标签路线是蒸馏**：student 拟合老师的整个概率分布，不只对 argmax；
 - bool 是 `[0,z]` 上的二分类 CE，choice/score 是 k 路 CE。
 
-**训练：两段式**（经典 linear-probe → finetune）：(1) 先冻结 backbone、只训 heads 若干步，head lr 拉高；(2) 再解冻整体微调，backbone lr 小（如 `1e-5`）、head lr 稍大（`1e-4`）；(3) 参数 FP32 存、forward BF16 autocast；(4) 多任务按固定权重混合采样。
+**训练：两段式**（经典 linear-probe → finetune）：(1) 先冻结 backbone、只训 heads 若干步，head lr 拉高；(2) 再解冻整体微调，backbone lr 小（如 `1e-5`）、head lr 稍大（`1e-4`）；(3) 参数 FP32 存、forward BF16 autocast；(4) 多任务按固定权重混合采样（Maze / Snake / Basic / PredictPosition = 1/3, 1/3, 1/6, 1/6）。
 
 ## 10. 数据流一图流
 
@@ -286,6 +295,61 @@ TypeSafe 宣称用 **RLCD（Reinforcement Learning for Calibrated Decisions）**
 **别急着上线。** 一个「便宜」的模型，如果它的错误会引来重试、人工 review、线上事故，那它一点都不便宜。稳妥顺序大致是：挑一个边界清楚、低风险的决策 → 先写 rubric 再调模型 → 收集有代表性（含模糊/对抗）的样本 → 让它 shadow mode 跑在现有 workflow 旁边、先不改行为 → 把 accuracy 对 confidence 画出来、用自己的数据定阈值 → 先自动化最安全那条分支 → 把模型版本 / questions / criteria / 阈值都记下来可回放。**questions 本身就是程序的一部分，要像代码一样做版本和 review。**
 
 最后提一句现状：Jev **权重不开源、还在 early access、只支持文本、也缺独立的校准数据**，现在还不到盲信它的时候。但它给出的那个「像软件一样」的模型接口——固定的答案类型、显式的不确定性、由代码掌控的分支——这个思路即便以后 Jev 被别的模型取代，也照样成立。而 NanoJev 的价值，正是让这套接口背后「不写字怎么做分类」的机制，变成了可以逐行读、逐段走查的开源代码。
+
+## 附录：四阶段实况走查（用 §2 的例子）
+
+把 §2 那个 state（客服工单，team / paid / impact 三题）按四个阶段的形状走一遍。backbone 用 Qwen3-0.6B，`hdd = 1024`。（输出概率沿用 §2 的示意值——真实数字要下载 checkpoint 在 CUDA 上跑；这里重点是形状与流动。）
+
+**阶段 1：pre-process = 纯字符串拼接**（程序做，模型不参与）。三题展开成 8 条 leaf（同题前缀共享，只末行不同）：
+
+```
+team(choice)   leaf#0  …State+Question(team)…    Candidate:\naccount: 账户与身份验证\nDecision:<eos>
+               leaf#1  …(同前缀)…                Candidate:\nbilling: 扣费与退款\nDecision:<eos>
+               leaf#2  …(同前缀)…                Candidate:\ntechnical: 功能错误\nDecision:<eos>
+paid(boolean)  leaf#3  …State+Question(paid)…    Candidate:\nThe proposition is true.\nDecision:<eos>
+impact(score)  leaf#4  …State+Question(impact)…  Candidate:\n功能正常\nDecision:<eos>
+               leaf#5  …(同前缀)…                Candidate:\n次要受阻有替代\nDecision:<eos>
+               leaf#6  …(同前缀)…                Candidate:\n核心受阻有替代\nDecision:<eos>
+               leaf#7  …(同前缀)…                Candidate:\n完全中断无替代\nDecision:<eos>
+```
+
+即 P = 8。
+
+**阶段 2：组 batch → 黑盒 transformer**
+
+```
+P = 8   lengths = [各 leaf 真实 token 数]   W = max(lengths)   # padding 到最长
+tokens : [8, W]    attn : [8, W]                              # attn 屏蔽 padding 位
+hidden = backbone(tokens, attn)        → [8, W, 1024]         # [P, W, hdd]
+leaves = hidden[arange(8), lengths-1]  → [8, 1024]            # 取每条 valid last token
+```
+
+**阶段 3：post-process —— 用 idx 把扁平结果 regroup 回「每题一行」**
+
+```
+N = 3   kmax = max(3, 2, 4) = 4
+offset 0→3→4→8:
+  i=0 team    choice  n=3 → h[0,:3]=leaves[0:3]   valid[0]=[T,T,T,F]
+  i=1 paid    boolean n=1 → h[1,:1]=leaves[3:4]   valid[1]=[T,T,F,F]   ← 标 2 格但只填 1 格
+  i=2 impact  score   n=4 → h[2,:4]=leaves[4:8]   valid[2]=[T,T,T,T]
+z = scalar(norm(h))                       → [3, 4] base logits
+set-attention 只作用 choice 行(下标[0])，给 team 的 3 个候选一个相对修正 delta
+boolean 行：丢弃 z[1,1]，用 z[1,0] 拼 [0, z]
+masked_fill(~valid, -1e9):
+  logits = [[ z00, z01, z02, -1e9 ],       # team   第4格屏蔽
+            [ 0.0, z10, -1e9, -1e9 ],       # paid   第3、4格屏蔽
+            [ z20, z21, z22,  z23 ]]        # impact 全有效
+```
+
+**阶段 4：softmax（模型外，每行只对真候选归一化）+ 输出**
+
+```
+team    softmax(logits[0][:3]) → {account:0.05, billing:0.88, technical:0.07}  → choice = billing
+paid    softmax(logits[1][:2]) → {false:0.93, true:0.07}                       → p_true = 0.07
+impact  softmax(logits[2][:4]) → {0:0.70, 1:0.20, 2:0.08, 3:0.02}              → score = Σ i·p_i = 0.42, level = 0
+```
+
+对照四阶段可见：**pre-process 是纯字符串展开（1→8 条 leaf）、transformer 只做特征提取（`[8,W]` → `[8,1024]`）、post-process 用 offset/kmax/valid 把扁平结果 regroup 回每题一行、softmax 在模型外逐题归一化。三个题型差异（choice 的 set 残差、bool 的 `[0,z]`、score 的期望读数）都发生在 post-process。**
 
 ## 参考资料
 
