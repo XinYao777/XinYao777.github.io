@@ -73,6 +73,10 @@ menu:
       name: 论文阅读
       url: /posts/paper-reading/
       weight: 15
+    - identifier: knowledge
+      name: 知识库
+      url: /knowledge/
+      weight: 18
     - identifier: archives
       name: 归档
       url: /archives/
