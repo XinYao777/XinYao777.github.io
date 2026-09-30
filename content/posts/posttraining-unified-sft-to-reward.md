@@ -32,7 +32,7 @@ summary: "后训练是用额外的训练信号调整模型生成内容的行为�
 
 例如：
 
-> 状态：“中国的首都是”
+> 状态：“中国的首都是”\
 > 动作：“北京”
 
 这里只为方便说明，假设“北京”是一个 token。实际 token 划分由 tokenizer 决定。
@@ -71,8 +71,8 @@ $$p_\theta(y\mid x)=\prod_{t=1}^{T}p_\theta(y_t\mid x,y_{\lt t}).$$
 状态来源和反馈类型可以组合：
 
 - 外部前缀＋示范 token：常见的 SFT。
-- 外部前缀＋教师分布：常见的 off-policy KD。
-- 学生前缀＋教师分布：on-policy KD。
+- 外部前缀＋教师分布：常见的 off-policy 知识蒸馏（KD）。
+- 学生前缀＋教师分布：on-policy 知识蒸馏。
 - 学生执行动作或生成轨迹＋奖励：常见的在线奖励优化。
 
 **下面先固定状态 $s$，只比较反馈和训练规则。** 这样不会把“训练目标的区别”和“状态来源的区别”混在一起。
@@ -227,7 +227,7 @@ $$\boxed{\ \frac{\partial J}{\partial z_b}=p_b\big(r_b-\bar r\big).\ }$$
 
 > 增强奖励高于当前平均水平的选择，减弱奖励低于平均水平的选择，并受到当前动作概率的加权。
 
-这里的平均奖励是从求导中自然出现的，我们还没有额外减去 baseline。
+这里的平均奖励是从求导中自然出现的，我们还没有额外减去基线（baseline，可从奖励里减去而不改变梯度期望的参考值）。
 
 本例中 $\bar r=0.2$，所以：
 
@@ -244,15 +244,19 @@ SFT 的示范是“北京”，对应 $q=(1,0,0)$，其 logits 真实梯度是 $
 | SFT：最大化 $\log p_{\text{北京}}$ | $(0.8,-0.5,-0.3)$ |
 | 一步奖励：最大化 $\sum_a p_a r_a$ | $(0.16,-0.10,-0.06)$ |
 
-本例中，一步奖励的梯度恰好是 SFT 梯度的 $0.2$ 倍。原因可以直接从目标看出来：
+本例中，一步奖励的梯度恰好是 SFT 梯度的 $0.2$ 倍。但这个“恰好成比例”是**两件事凑在一起**的结果，不能只归给目标函数。
+
+**其一，目标形状不同。** 期望回报 $J=\sum_a p_a r_a$ 对 $p$ 是线性的，而 SFT 最大化的是 $\log p$。由 $\nabla p_a=p_a\,\nabla\log p_a$（每个动作的概率梯度，等于自身概率乘以它的 log 梯度），回报梯度天生比 log-prob 梯度多带一个概率因子。
+
+**其二，两个 one-hot 恰好对齐。** SFT 的标签 $q=(1,0,0)$ 是 one-hot；本例的奖励 $r=(1,0,0)$ 也是 one-hot，而且指向同一个 token“北京”。正因为一个作 label、一个作 reward 却是同一个 one-hot，才有 $\bar r=\sum_a p_a r_a=p_{\text{北京}}$，期望回报塌缩成 SFT 正在提高的那个概率：
 
 $$J=p_{\text{北京}},\qquad F=\log p_{\text{北京}}.$$
 
-由链式法则：
+这时两者的梯度才**方向相同**，只差一个标量：
 
 $$\nabla_z J=p_{\text{北京}}\,\nabla_z\log p_{\text{北京}}=0.2\,\nabla_z F.$$
 
-**所以，额外的概率因子首先来自目标函数的区别：最大化概率，与最大化对数概率，梯度不同。** 后面从采样角度看，会得到同一个结果。这个简单比例依赖于本例“一个动作奖励为 1、其余为 0”的设置，不是所有奖励问题都如此。
+**所以这不是巧合，而是特殊设置下的产物；换掉任一条件就不成立。** 若奖励不是 one-hot，或 one-hot 落在别的 token 上，一般地 $\partial J/\partial z_b=p_b(r_b-\bar r)$，它与 $\nabla_z F=e_{\text{北京}}-p$ 通常并不平行，“差 $0.2$ 倍”这种说法根本无从谈起。归根结底，这里的 $0.2$ 同时来自两处：“概率 vs 对数概率”的目标差异，以及“reward 与 label 是对齐的同一个 one-hot”。后面从采样角度看，会得到同一个结果。
 
 ## 9. 通过链式法则，得到参数的真实梯度
 
@@ -268,7 +272,7 @@ $$\theta_{\text{new}}=\theta+\eta\nabla_\theta J.$$
 
 ## 10. 把真实参数梯度写成可采样的期望
 
-从定义出发，并利用 $\nabla_\theta p_a=p_a\nabla_\theta\log p_a$（有限 logits 的普通 softmax 给各动作正概率，可以相除）：
+从定义出发，并利用 $\nabla_\theta p_a=p_a\nabla_\theta\log p_a$（只要 logits 有限，softmax 给每个动作的概率都严格为正，这一步的相除才成立）：
 
 $$\nabla_\theta J=\sum_a r_a\nabla_\theta p_a=\sum_a p_a r_a\nabla_\theta\log p_a=\mathbb E_{a\sim p}\big[r_a\nabla_\theta\log p_a\big].$$
 
@@ -282,7 +286,62 @@ $$\boxed{\ \hat g_\theta=r_a\nabla_\theta\log p_a=J_f^\top\underbrace{r_a(e_a-p)
 
 它是一个**无偏估计**：$\mathbb E[\hat g_\theta]=\nabla_\theta J$，采样随机性平均掉后得到真实梯度。$N=1$ 也可以构成无偏估计，只是随机波动较大。这里终于出现了 one-hot 向量 $e_a$。
 
-## 11. 为什么采到北京后是 1，而不是 0.2
+顺带点名：把 $\nabla_\theta J$ 写成 $\mathbb E_{a\sim p}[r_a\nabla_\theta\log p_a]$、再用采样近似的这套做法，就是强化学习里的**策略梯度（policy gradient）**；只用采样奖励、不引入价值函数等额外结构的最简形式，通常称为 **REINFORCE**。本文从 SFT 一路推到这里，得到的正是它最基本的样子。
+
+## 11. $e_a-p$ 是怎么来的：把每个坐标的导数写全
+
+第 10 节直接写下了 $\nabla_z\log p_a=e_a-p$，但从“某一个坐标的导数”到“整个梯度向量”这一步没有展开。这里补齐这个连接，不引入新概念。
+
+**先分清在对什么求导。** 要解释的等号是
+
+$$\hat g_\theta=r_a\nabla_\theta\log p_a=J_f^\top r_a(e_a-p),$$
+
+它只依赖一个事实：
+
+$$\boxed{\ \nabla_z\log p_a=e_a-p.\ }$$
+
+这里求导的是**采到的动作 $a$ 的 log-prob**，不是直接对整个期望回报 $J$ 求导。固定状态 $s$，以词表大小 3 为例，$p=(p_1,p_2,p_3)=\operatorname{softmax}(z)$。假设这次采到了第一个 token“北京”，要研究的就是 $\log p_1$。
+
+**把三个坐标的导数全部写出来。** 由 softmax：
+
+$$\log p_1=z_1-\log\big(e^{z_1}+e^{z_2}+e^{z_3}\big).$$
+
+分别对 $z_1,z_2,z_3$ 求导：
+
+$$\frac{\partial\log p_1}{\partial z_1}=1-\frac{e^{z_1}}{\sum_j e^{z_j}}=1-p_1,$$
+
+$$\frac{\partial\log p_1}{\partial z_2}=0-\frac{e^{z_2}}{\sum_j e^{z_j}}=-p_2,\qquad
+\frac{\partial\log p_1}{\partial z_3}=0-\frac{e^{z_3}}{\sum_j e^{z_j}}=-p_3.$$
+
+第一项 $z_1$ 只对自身求导为 1、对其他坐标为 0；第二项通过 log 与指数的链式求导，分别得到 $p_1,p_2,p_3$。把坐标导数排成向量，再拆成两部分：
+
+$$\nabla_z\log p_1=\begin{pmatrix}1-p_1\\[2pt]-p_2\\[2pt]-p_3\end{pmatrix}=\begin{pmatrix}1\\[2pt]0\\[2pt]0\end{pmatrix}-\begin{pmatrix}p_1\\[2pt]p_2\\[2pt]p_3\end{pmatrix}=e_1-p.$$
+
+**所以 $e_a-p$ 并不是额外设计的更新规则，它就是 log-softmax 求导后把所有坐标合起来的结果。** 采到第二个 token 时同理 $\nabla_z\log p_2=e_2-p$，统一写成 $\nabla_z\log p_a=e_a-p$。
+
+**乘上奖励，再经链式法则传到参数。** 因为 $z=f(s;\theta)$，记 $J_f=\partial z/\partial\theta$，链式法则给出 $\nabla_\theta\log p_a=J_f^\top\nabla_z\log p_a$，于是
+
+$$\hat g_\theta=r_a\nabla_\theta\log p_a=r_aJ_f^\top(e_a-p)=J_f^\top r_a(e_a-p),$$
+
+最后一步只是把标量 $r_a$ 移进括号。整条链是：
+
+$$\underbrace{e_a-p}_{\log p_a\text{ 对 logits 的梯度}}\ \longrightarrow\ \underbrace{r_a(e_a-p)}_{\text{乘奖励，形成单次估计}}\ \longrightarrow\ \underbrace{J_f^\top r_a(e_a-p)}_{\text{传回参数}}.$$
+
+**它与真实梯度 $p_b(r_b-\bar r)$ 怎样对应。** 单次估计在第 $b$ 个坐标上为 $\hat g_{z,b}=r_a\big(\mathbf 1[a=b]-p_b\big)$。按采样概率取期望：
+
+$$\mathbb E_{a\sim p}[\hat g_{z,b}]=\sum_a p_a r_a\big(\mathbf 1[a=b]-p_b\big)=p_b r_b-p_b\sum_a p_a r_a=p_b(r_b-\bar r).$$
+
+所以三者不冲突：
+
+| 表达式 | 是什么 |
+|---|---|
+| $e_a-p$ | 某个动作的 log-prob 对 logits 的梯度 |
+| $r_a(e_a-p)$ | 执行一次动作后构造的梯度估计 |
+| 第 $b$ 项 $p_b(r_b-\bar r)$ | 对所有可能采样结果取期望后的真实梯度 |
+
+one-hot 向量里的 1，在数学上来自 $\partial z_a/\partial z_a=1$；它与其他坐标上的 0 合在一起，构成了 $e_a$。
+
+## 12. 为什么采到北京后是 1，而不是 0.2
 
 $p$ 和 $e_a$ 表示的是不同的东西：
 
@@ -303,7 +362,7 @@ $$\boxed{\ \mathbb E_{a\sim p}[e_a]=p.\ }$$
 
 一次记录是 one-hot；许多次记录的平均，才反映采样概率。
 
-## 12. 采到北京时，是不是和 SFT 恰好一样
+## 13. 采到北京时，是不是和 SFT 恰好一样
 
 **是的，在当前这个例子中，单次梯度恰好一样。** 采到“北京”、奖励为 1，一步奖励的 logits 梯度估计为：
 
@@ -327,7 +386,7 @@ $$\mathbb E[\hat g_z]=0.2\,(0.8,-0.5,-0.3)=(0.16,-0.10,-0.06),$$
 
 还要注意：零奖励动作的 log-prob 梯度并不为零。例如采到“上海”，$\nabla_z\log p_{\text{上海}}=(-0.2,0.5,-0.3)$，只是本次乘了零奖励才变成零。真实平均梯度仍会压低“上海”的 logit，因为采到并强化“北京”时，也会产生压低其他 logits 的信号。
 
-## 13. “平均方式不同”应该怎样准确表述
+## 14. “平均方式不同”应该怎样准确表述
 
 一个常见但不准确的说法是“样本的平均方式不同”。有限样本训练时，通常都用算术平均：
 
@@ -346,7 +405,7 @@ $$\boxed{\begin{array}{c}\text{目标：最大化模型选择的期望奖励}\\[
 
 **先求出的 logits 真实梯度解释“平均应该怎样调整”；后面的 one-hot 样本梯度解释“每次尝试怎样提供一个估计”。**
 
-## 14. 从固定状态回到实际训练的多个状态
+## 15. 从固定状态回到实际训练的多个状态
 
 前面的固定状态分析，是为了隔离训练规则的区别。实际训练会面对很多状态。对于一步任务，如果状态来自固定分布 $d(s)$，整体目标可以写成：
 
@@ -360,7 +419,7 @@ $$\hat g_\theta=\frac1B\sum_{i=1}^{B}r_i\nabla_\theta\log p_\theta(a_i\mid s_i).
 
 这里假设 $d(s)$ 固定。若状态由模型前面的动作生成，就进入多步问题：当前动作既影响结果，也影响后续会遇到什么状态。那是下一阶段需要加入的结构。
 
-## 15. 小结
+## 16. 小结
 
 | 层次 | SFT | 一步奖励优化 |
 |---|---|---|
