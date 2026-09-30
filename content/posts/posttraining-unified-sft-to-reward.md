@@ -168,13 +168,13 @@ $$\boxed{\ \nabla_z F_{\mathrm{SFT}}=q-p.\ }$$
 
 **监督学习在输出层的上升信号，是目标概率减去当前概率。**
 
-真实训练更新的是参数 $\theta$。定义 Jacobian $(J_f)_{ik}=\partial z_i/\partial\theta_k$，链式法则给出：
+真实训练更新的是参数 $\theta$。定义 $f$ 的 Jacobian $(Df)_{ik}=\partial z_i/\partial\theta_k$，链式法则给出：
 
-$$\boxed{\ \nabla_\theta F_{\mathrm{SFT}}=J_f^\top(q-p).\ }$$
+$$\boxed{\ \nabla_\theta F_{\mathrm{SFT}}=(Df)^\top(q-p).\ }$$
 
 于是梯度上升更新为：
 
-$$\theta_{\text{new}}=\theta+\eta J_f^\top(q-p),\qquad \eta>0.$$
+$$\theta_{\text{new}}=\theta+\eta (Df)^\top(q-p),\qquad \eta>0.$$
 
 **一个具体例子**（后面一直沿用）。假设词表只有三个 token：“北京、上海、南京”，当前概率与示范为：
 
@@ -186,11 +186,11 @@ $$q-p=(0.8,-0.5,-0.3).$$
 
 它要求提高“北京”的分数，降低另外两个分数。
 
-**但真实调整的从来不是 logits，而是参数 $\theta$。** $q-p$ 只是输出层“希望”收到的信号，它要先经过 $J_f^\top$ 反传成参数梯度，再由参数变化重新算出新的 logits。所以单看一条样本、更新一步后，实际 logits 的变化不一定正好等于 $\eta(q-p)$——中间隔着 $J_f^\top$ 这一层，$z$ 和 $\theta$ 并不是一一对应的。
+**但真实调整的从来不是 logits，而是参数 $\theta$。** $q-p$ 只是输出层“希望”收到的信号，它要先经过 $(Df)^\top$ 反传成参数梯度，再由参数变化重新算出新的 logits。所以单看一条样本、更新一步后，实际 logits 的变化不一定正好等于 $\eta(q-p)$——中间隔着 $(Df)^\top$ 这一层，$z$ 和 $\theta$ 并不是一一对应的。
 
-**在一个 batch 里，这一点会被进一步放大。** 同一次更新会把许多样本、许多状态各自的 $J_f^\top(q-p)$ 加在一起，共同落到共享的 $\theta$ 上。于是某一条样本的 logits 究竟怎么动，取决于整个 batch 的梯度聚合结果，而不只是它自己的 $q-p$：其他样本若在相关参数上给出方向不同的信号，会与它互相加强或抵消。（多状态情形的完整写法见后文“从单次估计到多次平均”一节。）
+**在一个 batch 里，这一点会被进一步放大。** 同一次更新会把许多样本、许多状态各自的 $(Df)^\top(q-p)$ 加在一起，共同落到共享的 $\theta$ 上。于是某一条样本的 logits 究竟怎么动，取决于整个 batch 的梯度聚合结果，而不只是它自己的 $q-p$：其他样本若在相关参数上给出方向不同的信号，会与它互相加强或抵消。（多状态情形的完整写法见后文“从单次估计到多次平均”一节。）
 
-顺带说，若把 one-hot 的 $q$ 换成教师软分布，采用交叉熵的分布蒸馏仍然得到 $\nabla_\theta F=J_f^\top(q-p)$。这个局部更新公式本身不决定状态来自教师还是学生；状态来源是另一项选择。
+顺带说，若把 one-hot 的 $q$ 换成教师软分布，采用交叉熵的分布蒸馏仍然得到 $\nabla_\theta F=(Df)^\top(q-p)$。这个局部更新公式本身不决定状态来自教师还是学生；状态来源是另一项选择。
 
 ## 3. 一步奖励：定义、真实梯度与和 SFT 的比较
 
@@ -274,9 +274,9 @@ $$\nabla_z J=p_{\text{北京}}\,\nabla_z\log p_{\text{北京}}=0.2\,\nabla_z F.$
 
 ### 通过链式法则，得到参数的真实梯度
 
-真实模型更新的是参数 $\theta$，logits 由 $z=f(s;\theta)$ 产生。仍记 $J_f=\partial z/\partial\theta$，于是：
+真实模型更新的是参数 $\theta$，logits 由 $z=f(s;\theta)$ 产生。仍记 $Df=\partial z/\partial\theta$，于是：
 
-$$\nabla_\theta J=J_f^\top\nabla_z J=J_f^\top(0.16,-0.10,-0.06).$$
+$$\nabla_\theta J=(Df)^\top\nabla_z J=(Df)^\top(0.16,-0.10,-0.06).$$
 
 如果知道这个真实梯度，就可以直接做梯度上升：
 
@@ -296,7 +296,7 @@ $$\nabla_\theta J=\sum_j r_j\nabla_\theta p_j=\sum_j p_j r_j\nabla_\theta\log p_
 2. 执行后观察奖励 $r_a$；
 3. 计算一次估计：
 
-$$\boxed{\ \hat g_\theta=r_a\nabla_\theta\log p_a=J_f^\top\underbrace{r_a(e_a-p)}_{\text{单次 logits 梯度估计}}.\ }$$
+$$\boxed{\ \hat g_\theta=r_a\nabla_\theta\log p_a=(Df)^\top\underbrace{r_a(e_a-p)}_{\text{单次 logits 梯度估计}}.\ }$$
 
 它是一个**无偏估计**：$\mathbb E[\hat g_\theta]=\nabla_\theta J$，采样随机性平均掉后得到真实梯度。$N=1$ 也可以构成无偏估计，只是随机波动较大。
 
@@ -310,7 +310,7 @@ $$\boxed{\ \hat g_\theta=r_a\nabla_\theta\log p_a=J_f^\top\underbrace{r_a(e_a-p)
 
 **先分清在对什么求导。** 要解释的等号是
 
-$$\hat g_\theta=r_a\nabla_\theta\log p_a=J_f^\top r_a(e_a-p),$$
+$$\hat g_\theta=r_a\nabla_\theta\log p_a=(Df)^\top r_a(e_a-p),$$
 
 它只依赖一个事实：
 
@@ -337,13 +337,13 @@ $$\nabla_z\log p_1=\begin{pmatrix}1-p_1\\[2pt]-p_2\\[2pt]-p_3\end{pmatrix}=\begi
 
 这里 $e_a$ 就是第 $a$ 个分量为 1、其余为 0 的 one-hot 向量，即 $(e_a)_i=\mathbf 1[i=a]$。所以 $e_a-p$ 逐分量看正是前面 SFT 一节的 $\mathbf 1[a=i]-p_i$，两种记法完全等价：$\mathbf 1[i=a]$ 是"第 $i$ 个坐标"的写法，$e_a$ 是把这些坐标打包成向量的写法。向量级的等式（如 $\hat g_z=r_a(e_a-p)$、$\mathbb E_{a\sim p}[e_a]=p$）用 $e_a$ 更紧凑、也不会出现"标量减向量"的类型问题。
 
-**乘上奖励，再经链式法则传到参数。** 因为 $z=f(s;\theta)$，记 $J_f=\partial z/\partial\theta$，链式法则给出 $\nabla_\theta\log p_a=J_f^\top\nabla_z\log p_a$，于是
+**乘上奖励，再经链式法则传到参数。** 因为 $z=f(s;\theta)$，记 $Df=\partial z/\partial\theta$，链式法则给出 $\nabla_\theta\log p_a=(Df)^\top\nabla_z\log p_a$，于是
 
-$$\hat g_\theta=r_a\nabla_\theta\log p_a=r_aJ_f^\top(e_a-p)=J_f^\top r_a(e_a-p),$$
+$$\hat g_\theta=r_a\nabla_\theta\log p_a=r_a(Df)^\top(e_a-p)=(Df)^\top r_a(e_a-p),$$
 
 最后一步只是把标量 $r_a$ 移进括号。整条链是：
 
-$$\underbrace{e_a-p}_{\log p_a\text{ 对 logits 的梯度}}\ \longrightarrow\ \underbrace{r_a(e_a-p)}_{\text{乘奖励，形成单次估计}}\ \longrightarrow\ \underbrace{J_f^\top r_a(e_a-p)}_{\text{传回参数}}.$$
+$$\underbrace{e_a-p}_{\log p_a\text{ 对 logits 的梯度}}\ \longrightarrow\ \underbrace{r_a(e_a-p)}_{\text{乘奖励，形成单次估计}}\ \longrightarrow\ \underbrace{(Df)^\top r_a(e_a-p)}_{\text{传回参数}}.$$
 
 **它与真实梯度 $p_i(r_i-\bar r)$ 怎样对应。** 单次估计在第 $i$ 个坐标上为 $\hat g_{z,i}=r_a\big(\mathbf 1[i=a]-p_i\big)$。按采样概率取期望：
 
@@ -386,7 +386,7 @@ $$\boxed{\ \mathbb E_{a\sim p}[e_a]=p.\ }$$
 
 $$\hat g_z=1\cdot\big((1,0,0)-p\big)=(0.8,-0.5,-0.3),$$
 
-而 SFT 用“北京”作示范时也是 $\nabla_z F=(1,0,0)-p=(0.8,-0.5,-0.3)$。状态、参数都相同，经过同一个 $J_f^\top$，参数梯度也一样。
+而 SFT 用“北京”作示范时也是 $\nabla_z F=(1,0,0)-p=(0.8,-0.5,-0.3)$。状态、参数都相同，经过同一个 $(Df)^\top$，参数梯度也一样。
 
 **但“一次更新一样”与“整个训练目标一样”不同。** SFT 数据直接提供“北京”；奖励训练只有 20% 的概率采到“北京”，其余两种动作奖励为零，在这个**未减 baseline 的估计器**里单次估计为零：
 
@@ -446,7 +446,7 @@ $$\boxed{\begin{array}{c}\text{目标：最大化模型选择的期望奖励}\\[
 | 最大化目标 | $\log p_\theta(a^*\mid s)$ | $\mathbb E_{a\sim p_\theta}[r(s,a)]$ |
 | logits 真实梯度 | $q-p$ | 第 $i$ 项为 $p_i(r_i-\bar r)$ |
 | 单样本 logits 信号 | $e_{a^*}-p$ | $r_k(e_{a_k}-p)$ |
-| 参数如何更新 | logits 信号经 $J_f^\top$ 回传 | logits 信号经 $J_f^\top$ 回传 |
+| 参数如何更新 | logits 信号经 $(Df)^\top$ 回传 | logits 信号经 $(Df)^\top$ 回传 |
 
 二者共享“调整 token 概率”的模型接口，但目标不同、样本来自的分布不同、每条样本带的权重也不同。推导顺序上，**先定义期望回报，对 logits 求真实梯度，与 SFT 比较，再经链式法则得到参数梯度，最后才用采样把它变成可执行的训练规则**——真实梯度回答“平均应该怎样调整”，one-hot 样本回答“每次尝试怎样提供一个估计”。
 
