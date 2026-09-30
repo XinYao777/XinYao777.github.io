@@ -22,7 +22,9 @@ summary: "后训练是用额外的训练信号调整模型生成内容的行为�
 
 下面先建立这三个问题的共同语言，然后从 SFT 推导到一步奖励优化。为了把变量控制清楚，比较两种训练规则时，我们始终先固定同一个前缀。
 
-## 1. 在哪里学：状态与动作空间
+## 1. 三个问题的共同语言
+
+### 在哪里学：状态与动作空间
 
 对自回归语言模型来说，在每一步生成中：
 
@@ -56,7 +58,7 @@ $$p_\theta(y\mid x)=\prod_{t=1}^{T}p_\theta(y_t\mid x,y_{\lt t}).$$
 
 “老师写到这里，应该怎样继续”和“学生自己走到这里，应该怎样继续”，可能是不同的问题。
 
-## 2. 拿到什么反馈：示范与奖励
+### 拿到什么反馈：示范与奖励
 
 在某个状态上，常见反馈可以分成：
 
@@ -77,7 +79,7 @@ $$p_\theta(y\mid x)=\prod_{t=1}^{T}p_\theta(y_t\mid x,y_{\lt t}).$$
 
 **下面先固定状态 $s$，只比较反馈和训练规则。** 这样不会把“训练目标的区别”和“状态来源的区别”混在一起。
 
-## 3. 模型如何从参数产生动作概率
+### 模型如何从参数产生动作概率
 
 设词表大小为 $K$。模型在状态 $s$ 上输出：
 
@@ -91,7 +93,7 @@ $$z=f(s;\theta)\in\mathbb R^K.$$
 
 通过 softmax 得到动作概率：
 
-$$p_\theta(a\mid s)=\frac{e^{z_a}}{\sum_{b\in\mathcal V}e^{z_b}}.$$
+$$p_\theta(a\mid s)=\frac{e^{z_a}}{\sum_{j\in\mathcal V}e^{z_j}}.$$
 
 固定状态后，我们会简写：
 
@@ -108,7 +110,9 @@ $$\boxed{\ \theta\longrightarrow z=f(s;\theta)\longrightarrow p=\operatorname{so
 
 两者通过链式法则连接，但不能把 logits 梯度直接当成参数梯度。
 
-## 4. 从 SFT 开始：示范直接指定要提高概率的动作
+## 2. SFT：从示范到梯度
+
+### 从 SFT 开始：示范直接指定要提高概率的动作
 
 固定状态 $s$，数据提供示范 token $a^*$。SFT 最小化负对数似然：
 
@@ -120,21 +124,21 @@ $$L_{\mathrm{SFT}}(\theta)=-\log p_\theta(a^*\mid s).$$
 
 也可以把示范表示成 one-hot 分布 $q$：
 
-$$q_a=\begin{cases}1,&a=a^*,\\0,&a\ne a^*.\end{cases}$$
+$$q_j=\begin{cases}1,&j=a^*,\\0,&j\ne a^*.\end{cases}$$
 
 于是：
 
-$$L_{\mathrm{SFT}}(\theta)=-\sum_a q_a\log p_\theta(a\mid s).$$
+$$L_{\mathrm{SFT}}(\theta)=-\sum_j q_j\log p_\theta(j\mid s).$$
 
 这里，**$q$ 是监督分布，不是一条序列**。SFT 用一个已给定的 token 构造 one-hot 分布；一条完整序列则在每个位置提供一个这样的标签。
 
 为方便与后面的回报最大化比较，定义（把最小化换成最大化，只是改变正负号）：
 
-$$F_{\mathrm{SFT}}(\theta)=-L_{\mathrm{SFT}}(\theta)=\sum_a q_a\log p_\theta(a\mid s).$$
+$$F_{\mathrm{SFT}}(\theta)=-L_{\mathrm{SFT}}(\theta)=\sum_j q_j\log p_\theta(j\mid s).$$
 
 $F_{\mathrm{SFT}}$ 是负交叉熵，还不是由环境奖励定义的期望回报。
 
-## 5. SFT 的梯度：先对 logits，再经链式法则到参数
+### SFT 的梯度：先对 logits，再经链式法则到参数
 
 本次更新中，状态 $s$ 和监督分布 $q$ 都固定。为了看清每个 token 的输出信号，先对 logits 求导。
 
@@ -142,29 +146,29 @@ $F_{\mathrm{SFT}}$ 是负交叉熵，还不是由环境奖励定义的期望回�
 
 $$\log p_a=z_a-\log\Big(\sum_j e^{z_j}\Big).$$
 
-对某个 logit $z_b$ 求导。第一项 $\partial z_a/\partial z_b=\mathbf 1[a=b]$；第二项用链式法则，令 $u=\sum_j e^{z_j}$，先分两步：
+对某个 logit $z_i$ 求导。第一项 $\partial z_a/\partial z_i=\mathbf 1[a=i]$；第二项用链式法则，令 $u=\sum_j e^{z_j}$，先分两步：
 
-$$\frac{\mathrm d\log u}{\mathrm d u}=\frac1u,\qquad \frac{\partial u}{\partial z_b}=e^{z_b},$$
+$$\frac{\mathrm d\log u}{\mathrm d u}=\frac1u,\qquad \frac{\partial u}{\partial z_i}=e^{z_i},$$
 
 两者相乘：
 
-$$\frac{\partial\log u}{\partial z_b}=\frac1u\cdot e^{z_b}=\frac{e^{z_b}}{\sum_j e^{z_j}}=p_b.$$
+$$\frac{\partial\log u}{\partial z_i}=\frac1u\cdot e^{z_i}=\frac{e^{z_i}}{\sum_j e^{z_j}}=p_i.$$
 
 因此得到一个后面反复用到的公式：
 
-$$\boxed{\ \frac{\partial\log p_a}{\partial z_b}=\mathbf 1[a=b]-p_b.\ }$$
+$$\boxed{\ \frac{\partial\log p_a}{\partial z_i}=\mathbf 1[a=i]-p_i.\ }$$
 
 代入 SFT 目标：
 
-$$\frac{\partial F_{\mathrm{SFT}}}{\partial z_b}=\sum_a q_a\big(\mathbf 1[a=b]-p_b\big)=q_b-p_b\sum_a q_a=q_b-p_b,$$
+$$\frac{\partial F_{\mathrm{SFT}}}{\partial z_i}=\sum_j q_j\big(\mathbf 1[j=i]-p_i\big)=q_i-p_i\sum_j q_j=q_i-p_i,$$
 
-最后一步用了 $\sum_a q_a=1$。写成向量：
+最后一步用了 $\sum_j q_j=1$。写成向量：
 
 $$\boxed{\ \nabla_z F_{\mathrm{SFT}}=q-p.\ }$$
 
 **监督学习在输出层的上升信号，是目标概率减去当前概率。**
 
-真实训练更新的是参数 $\theta$。定义 Jacobian $(J_f)_{bk}=\partial z_b/\partial\theta_k$，链式法则给出：
+真实训练更新的是参数 $\theta$。定义 Jacobian $(J_f)_{ik}=\partial z_i/\partial\theta_k$，链式法则给出：
 
 $$\boxed{\ \nabla_\theta F_{\mathrm{SFT}}=J_f^\top(q-p).\ }$$
 
@@ -184,11 +188,13 @@ $$q-p=(0.8,-0.5,-0.3).$$
 
 **但真实调整的从来不是 logits，而是参数 $\theta$。** $q-p$ 只是输出层“希望”收到的信号，它要先经过 $J_f^\top$ 反传成参数梯度，再由参数变化重新算出新的 logits。所以单看一条样本、更新一步后，实际 logits 的变化不一定正好等于 $\eta(q-p)$——中间隔着 $J_f^\top$ 这一层，$z$ 和 $\theta$ 并不是一一对应的。
 
-**在一个 batch 里，这一点会被进一步放大。** 同一次更新会把许多样本、许多状态各自的 $J_f^\top(q-p)$ 加在一起，共同落到共享的 $\theta$ 上。于是某一条样本的 logits 究竟怎么动，取决于整个 batch 的梯度聚合结果，而不只是它自己的 $q-p$：其他样本若在相关参数上给出方向不同的信号，会与它互相加强或抵消。（多状态情形的完整写法见第 15 节。）
+**在一个 batch 里，这一点会被进一步放大。** 同一次更新会把许多样本、许多状态各自的 $J_f^\top(q-p)$ 加在一起，共同落到共享的 $\theta$ 上。于是某一条样本的 logits 究竟怎么动，取决于整个 batch 的梯度聚合结果，而不只是它自己的 $q-p$：其他样本若在相关参数上给出方向不同的信号，会与它互相加强或抵消。（多状态情形的完整写法见后文“从单次估计到多次平均”一节。）
 
 顺带说，若把 one-hot 的 $q$ 换成教师软分布，采用交叉熵的分布蒸馏仍然得到 $\nabla_\theta F=J_f^\top(q-p)$。这个局部更新公式本身不决定状态来自教师还是学生；状态来源是另一项选择。
 
-## 6. 固定同一个状态，只改变训练反馈
+## 3. 一步奖励：定义、真实梯度与和 SFT 的比较
+
+### 固定同一个状态，只改变训练反馈
 
 现在保留相同的模型、相同的状态、相同的当前概率：
 
@@ -205,11 +211,11 @@ $$r=(1,0,0).$$
 
 这表示环境的评价规则，**不代表训练程序已经提前查询了所有动作的奖励**。执行之前，我们通常不知道每个动作的奖励；执行某个动作后，才观察到它的奖励。这里先假设奖励是确定的，对固定的 $s,a$，$r(s,a)$ 不直接依赖 $\theta$：模型参数通过改变选择概率，影响平均获得的奖励。
 
-## 7. 一步奖励：先定义目标，再对 logits 求真实梯度
+### 一步奖励：先定义目标，再对 logits 求真实梯度
 
 我们希望模型按自己的概率选择时，平均奖励更高，因此最大化期望回报：
 
-$$\boxed{\ J=\sum_a p_a\, r_a.\ }$$
+$$\boxed{\ J=\sum_j p_j\, r_j.\ }$$
 
 本例：$J=0.2\times1+0.5\times0+0.3\times0=0.2$。
 
@@ -217,19 +223,19 @@ $$\boxed{\ J=\sum_a p_a\, r_a.\ }$$
 
 暂时把 logits $z$ 当作独立变量。奖励 $r_a$ 固定，所以
 
-$$\frac{\partial J}{\partial z_b}=\sum_a r_a\frac{\partial p_a}{\partial z_b}.$$
+$$\frac{\partial J}{\partial z_i}=\sum_j r_j\frac{\partial p_j}{\partial z_i}.$$
 
-由第 5 节的 $\dfrac{\partial\log p_a}{\partial z_b}=\mathbf 1[a=b]-p_b$，又因 $\dfrac{\partial\log p_a}{\partial z_b}=\dfrac1{p_a}\dfrac{\partial p_a}{\partial z_b}$，得到：
+由前面（SFT 的梯度）已推出的 $\dfrac{\partial\log p_a}{\partial z_i}=\mathbf 1[a=i]-p_i$，又因 $\dfrac{\partial\log p_a}{\partial z_i}=\dfrac1{p_a}\dfrac{\partial p_a}{\partial z_i}$，得到：
 
-$$\frac{\partial p_a}{\partial z_b}=p_a\big(\mathbf 1[a=b]-p_b\big).$$
+$$\frac{\partial p_a}{\partial z_i}=p_a\big(\mathbf 1[a=i]-p_i\big).$$
 
 代入：
 
-$$\frac{\partial J}{\partial z_b}=\sum_a r_a p_a\big(\mathbf 1[a=b]-p_b\big)=p_b r_b-p_b\sum_a p_a r_a.$$
+$$\frac{\partial J}{\partial z_i}=\sum_j r_j p_j\big(\mathbf 1[j=i]-p_i\big)=p_i r_i-p_i\sum_j p_j r_j.$$
 
-定义当前平均奖励 $\bar r=\sum_a p_a r_a$，得到：
+定义当前平均奖励 $\bar r=\sum_j p_j r_j$，得到：
 
-$$\boxed{\ \frac{\partial J}{\partial z_b}=p_b\big(r_b-\bar r\big).\ }$$
+$$\boxed{\ \frac{\partial J}{\partial z_i}=p_i\big(r_i-\bar r\big).\ }$$
 
 **这就是期望回报对 logits 的真实梯度，此处没有进行任何采样。** 平均意义上的 logits 上升信号是：
 
@@ -243,20 +249,20 @@ $$\boxed{\ \nabla_z J=(0.16,-0.10,-0.06).\ }$$
 
 方向和 SFT 一致：提高“北京”的分数，降低另外两个。
 
-## 8. 与 SFT 的真实梯度并排比较
+### 与 SFT 的真实梯度并排比较
 
 SFT 的示范是“北京”，对应 $q=(1,0,0)$，其 logits 真实梯度是 $\nabla_z F=q-p=(0.8,-0.5,-0.3)$。两者并排：
 
 | 训练目标 | logits 的真实上升梯度 |
 |---|---|
 | SFT：最大化 $\log p_{\text{北京}}$ | $(0.8,-0.5,-0.3)$ |
-| 一步奖励：最大化 $\sum_a p_a r_a$ | $(0.16,-0.10,-0.06)$ |
+| 一步奖励：最大化 $\sum_j p_j r_j$ | $(0.16,-0.10,-0.06)$ |
 
 本例中，一步奖励的梯度恰好是 SFT 梯度的 $0.2$ 倍。但这个“恰好成比例”是**两件事凑在一起**的结果，不能只归给目标函数。
 
-**其一，目标形状不同。** 期望回报 $J=\sum_a p_a r_a$ 对 $p$ 是线性的，而 SFT 最大化的是 $\log p$。由 $\nabla p_a=p_a\,\nabla\log p_a$（每个动作的概率梯度，等于自身概率乘以它的 log 梯度），回报梯度天生比 log-prob 梯度多带一个概率因子。
+**其一，目标形状不同。** 期望回报 $J=\sum_j p_j r_j$ 对 $p$ 是线性的，而 SFT 最大化的是 $\log p$。由 $\nabla p_j=p_j\,\nabla\log p_j$（每个动作的概率梯度，等于自身概率乘以它的 log 梯度），回报梯度天生比 log-prob 梯度多带一个概率因子。
 
-**其二，两个 one-hot 恰好对齐。** SFT 的标签 $q=(1,0,0)$ 是 one-hot；本例的奖励 $r=(1,0,0)$ 也是 one-hot，而且指向同一个 token“北京”。正因为一个作 label、一个作 reward 却是同一个 one-hot，才有 $\bar r=\sum_a p_a r_a=p_{\text{北京}}$，期望回报塌缩成 SFT 正在提高的那个概率：
+**其二，两个 one-hot 恰好对齐。** SFT 的标签 $q=(1,0,0)$ 是 one-hot；本例的奖励 $r=(1,0,0)$ 也是 one-hot，而且指向同一个 token“北京”。正因为一个作 label、一个作 reward 却是同一个 one-hot，才有 $\bar r=\sum_j p_j r_j=p_{\text{北京}}$，期望回报塌缩成 SFT 正在提高的那个概率：
 
 $$J=p_{\text{北京}},\qquad F=\log p_{\text{北京}}.$$
 
@@ -264,9 +270,9 @@ $$J=p_{\text{北京}},\qquad F=\log p_{\text{北京}}.$$
 
 $$\nabla_z J=p_{\text{北京}}\,\nabla_z\log p_{\text{北京}}=0.2\,\nabla_z F.$$
 
-**所以这不是巧合，而是特殊设置下的产物；换掉任一条件就不成立。** 若奖励不是 one-hot，或 one-hot 落在别的 token 上，一般地 $\partial J/\partial z_b=p_b(r_b-\bar r)$，它与 $\nabla_z F=e_{\text{北京}}-p$ 通常并不平行，“差 $0.2$ 倍”这种说法根本无从谈起。归根结底，这里的 $0.2$ 同时来自两处：“概率 vs 对数概率”的目标差异，以及“reward 与 label 是对齐的同一个 one-hot”。后面从采样角度看，会得到同一个结果。
+**所以这不是巧合，而是特殊设置下的产物；换掉任一条件就不成立。** 若奖励不是 one-hot，或 one-hot 落在别的 token 上，一般地 $\partial J/\partial z_i=p_i(r_i-\bar r)$，它与 $\nabla_z F=e_{\text{北京}}-p$ 通常并不平行，“差 $0.2$ 倍”这种说法根本无从谈起。归根结底，这里的 $0.2$ 同时来自两处：“概率 vs 对数概率”的目标差异，以及“reward 与 label 是对齐的同一个 one-hot”。后面从采样角度看，会得到同一个结果。
 
-## 9. 通过链式法则，得到参数的真实梯度
+### 通过链式法则，得到参数的真实梯度
 
 真实模型更新的是参数 $\theta$，logits 由 $z=f(s;\theta)$ 产生。仍记 $J_f=\partial z/\partial\theta$，于是：
 
@@ -276,13 +282,13 @@ $$\nabla_\theta J=J_f^\top\nabla_z J=J_f^\top(0.16,-0.10,-0.06).$$
 
 $$\theta_{\text{new}}=\theta+\eta\nabla_\theta J.$$
 
-**但问题是：通常不知道所有动作的奖励，无法直接算出前面的完整求和。** 因此才需要采样估计。
+**但问题在于这个“完整求和”根本算不出来。** 无论是 logits 梯度里的平均奖励 $\bar r=\sum_j p_j r_j$，还是参数梯度 $\nabla_\theta J=\sum_j p_j r_j\nabla_\theta\log p_j$，都是对**所有动作**求和，需要知道每一个 $r(s,a)$。可是我们事先并不知道这些奖励——只有真正选中某个动作、在环境里执行之后，才观察到它这一个的奖励。所以这个求和无法直接算，只能用采样去估计。
 
-## 10. 把真实参数梯度写成可采样的期望
+## 4. 策略梯度与 REINFORCE：从真实梯度到采样估计
 
-从定义出发，并利用 $\nabla_\theta p_a=p_a\nabla_\theta\log p_a$（只要 logits 有限，softmax 给每个动作的概率都严格为正，这一步的相除才成立）：
+从定义出发，并利用 $\nabla_\theta p_j=p_j\nabla_\theta\log p_j$（只要 logits 有限，softmax 给每个动作的概率都严格为正，这一步的相除才成立）：
 
-$$\nabla_\theta J=\sum_a r_a\nabla_\theta p_a=\sum_a p_a r_a\nabla_\theta\log p_a=\mathbb E_{a\sim p}\big[r_a\nabla_\theta\log p_a\big].$$
+$$\nabla_\theta J=\sum_j r_j\nabla_\theta p_j=\sum_j p_j r_j\nabla_\theta\log p_j=\mathbb E_{a\sim p}\big[r_a\nabla_\theta\log p_a\big].$$
 
 **到这里仍然是精确等式，不是采样估计。** 这次改写的作用是：把真实梯度写成了某个随机量的期望，而这个随机量只需要一个已执行动作的奖励。于是我们可以：
 
@@ -292,13 +298,15 @@ $$\nabla_\theta J=\sum_a r_a\nabla_\theta p_a=\sum_a p_a r_a\nabla_\theta\log p_
 
 $$\boxed{\ \hat g_\theta=r_a\nabla_\theta\log p_a=J_f^\top\underbrace{r_a(e_a-p)}_{\text{单次 logits 梯度估计}}.\ }$$
 
-它是一个**无偏估计**：$\mathbb E[\hat g_\theta]=\nabla_\theta J$，采样随机性平均掉后得到真实梯度。$N=1$ 也可以构成无偏估计，只是随机波动较大。这里终于出现了 one-hot 向量 $e_a$。
+它是一个**无偏估计**：$\mathbb E[\hat g_\theta]=\nabla_\theta J$，采样随机性平均掉后得到真实梯度。$N=1$ 也可以构成无偏估计，只是随机波动较大。
 
-顺带点名：把 $\nabla_\theta J$ 写成 $\mathbb E_{a\sim p}[r_a\nabla_\theta\log p_a]$、再用采样近似的这套做法，就是强化学习里的**策略梯度（policy gradient）**；只用采样奖励、不引入价值函数等额外结构的最简形式，通常称为 **REINFORCE**。本文从 SFT 一路推到这里，得到的正是它最基本的样子。
+上式第二个等号用到了 $\nabla_z\log p_a=e_a-p$，其中 $e_a$ 是采到动作 $a$ 的 one-hot 向量。这一步这里先直接用，下一小节再逐坐标把它推出来。
 
-## 11. $e_a-p$ 是怎么来的：把每个坐标的导数写全
+现在可以给它一个名字：把 $\nabla_\theta J$ 写成 $\mathbb E_{a\sim p}[r_a\nabla_\theta\log p_a]$、再用采样近似的这套做法，就是强化学习里的**策略梯度（policy gradient）**；只用采样奖励、不引入价值函数等额外结构的最简形式，通常称为 **REINFORCE**。本文从 SFT 一路推到这里，得到的正是它最基本的样子。
 
-第 10 节直接写下了 $\nabla_z\log p_a=e_a-p$，但从“某一个坐标的导数”到“整个梯度向量”这一步没有展开。这里补齐这个连接，不引入新概念。
+### $e_a-p$ 是怎么来的：把每个坐标的导数写全
+
+本节开头直接写下了 $\nabla_z\log p_a=e_a-p$，但从“某一个坐标的导数”到“整个梯度向量”这一步没有展开。这里补齐这个连接，不引入新概念。
 
 **先分清在对什么求导。** 要解释的等号是
 
@@ -327,6 +335,8 @@ $$\nabla_z\log p_1=\begin{pmatrix}1-p_1\\[2pt]-p_2\\[2pt]-p_3\end{pmatrix}=\begi
 
 **所以 $e_a-p$ 并不是额外设计的更新规则，它就是 log-softmax 求导后把所有坐标合起来的结果。** 采到第二个 token 时同理 $\nabla_z\log p_2=e_2-p$，统一写成 $\nabla_z\log p_a=e_a-p$。
 
+这里 $e_a$ 就是第 $a$ 个分量为 1、其余为 0 的 one-hot 向量，即 $(e_a)_i=\mathbf 1[i=a]$。所以 $e_a-p$ 逐分量看正是前面 SFT 一节的 $\mathbf 1[a=i]-p_i$，两种记法完全等价：$\mathbf 1[i=a]$ 是"第 $i$ 个坐标"的写法，$e_a$ 是把这些坐标打包成向量的写法。向量级的等式（如 $\hat g_z=r_a(e_a-p)$、$\mathbb E_{a\sim p}[e_a]=p$）用 $e_a$ 更紧凑、也不会出现"标量减向量"的类型问题。
+
 **乘上奖励，再经链式法则传到参数。** 因为 $z=f(s;\theta)$，记 $J_f=\partial z/\partial\theta$，链式法则给出 $\nabla_\theta\log p_a=J_f^\top\nabla_z\log p_a$，于是
 
 $$\hat g_\theta=r_a\nabla_\theta\log p_a=r_aJ_f^\top(e_a-p)=J_f^\top r_a(e_a-p),$$
@@ -335,9 +345,9 @@ $$\hat g_\theta=r_a\nabla_\theta\log p_a=r_aJ_f^\top(e_a-p)=J_f^\top r_a(e_a-p),
 
 $$\underbrace{e_a-p}_{\log p_a\text{ 对 logits 的梯度}}\ \longrightarrow\ \underbrace{r_a(e_a-p)}_{\text{乘奖励，形成单次估计}}\ \longrightarrow\ \underbrace{J_f^\top r_a(e_a-p)}_{\text{传回参数}}.$$
 
-**它与真实梯度 $p_b(r_b-\bar r)$ 怎样对应。** 单次估计在第 $b$ 个坐标上为 $\hat g_{z,b}=r_a\big(\mathbf 1[a=b]-p_b\big)$。按采样概率取期望：
+**它与真实梯度 $p_i(r_i-\bar r)$ 怎样对应。** 单次估计在第 $i$ 个坐标上为 $\hat g_{z,i}=r_a\big(\mathbf 1[i=a]-p_i\big)$。按采样概率取期望：
 
-$$\mathbb E_{a\sim p}[\hat g_{z,b}]=\sum_a p_a r_a\big(\mathbf 1[a=b]-p_b\big)=p_b r_b-p_b\sum_a p_a r_a=p_b(r_b-\bar r).$$
+$$\mathbb E_{a\sim p}[\hat g_{z,i}]=\sum_j p_j r_j\big(\mathbf 1[i=j]-p_i\big)=p_i r_i-p_i\sum_j p_j r_j=p_i(r_i-\bar r).$$
 
 所以三者不冲突：
 
@@ -345,11 +355,11 @@ $$\mathbb E_{a\sim p}[\hat g_{z,b}]=\sum_a p_a r_a\big(\mathbf 1[a=b]-p_b\big)=p
 |---|---|
 | $e_a-p$ | 某个动作的 log-prob 对 logits 的梯度 |
 | $r_a(e_a-p)$ | 执行一次动作后构造的梯度估计 |
-| 第 $b$ 项 $p_b(r_b-\bar r)$ | 对所有可能采样结果取期望后的真实梯度 |
+| 第 $i$ 项 $p_i(r_i-\bar r)$ | 对所有可能采样结果取期望后的真实梯度 |
 
 one-hot 向量里的 1，在数学上来自 $\partial z_a/\partial z_a=1$；它与其他坐标上的 0 合在一起，构成了 $e_a$。
 
-## 12. 为什么采到北京后是 1，而不是 0.2
+### 为什么采到北京后是 1，而不是 0.2
 
 $p$ 和 $e_a$ 表示的是不同的东西：
 
@@ -364,13 +374,13 @@ $p$ 和 $e_a$ 表示的是不同的东西：
 
 它不表示“模型已经把北京的生成概率改成了 1”——模型此时的概率仍然是 $p=(0.2,0.5,0.3)$。就像抛硬币时，正面概率可以是 $0.5$，但记录“这次是否出现正面”时，只能记为 1 或 0。
 
-这里的 one-hot 来自求导中的指示函数 $\mathbf 1[a=b]$：选中了哪个动作，指示向量就在那个位置为 1。它与采样概率的联系是：
+这里的 one-hot 来自求导中的指示函数 $\mathbf 1[i=a]$：选中了哪个动作，指示向量就在那个位置为 1。它与采样概率的联系是：
 
 $$\boxed{\ \mathbb E_{a\sim p}[e_a]=p.\ }$$
 
 一次记录是 one-hot；许多次记录的平均，才反映采样概率。
 
-## 13. 采到北京时，是不是和 SFT 恰好一样
+### 采到北京时，是不是和 SFT 恰好一样
 
 **是的，在当前这个例子中，单次梯度恰好一样。** 采到“北京”、奖励为 1，一步奖励的 logits 梯度估计为：
 
@@ -390,52 +400,52 @@ $$\hat g_z=1\cdot\big((1,0,0)-p\big)=(0.8,-0.5,-0.3),$$
 
 $$\mathbb E[\hat g_z]=0.2\,(0.8,-0.5,-0.3)=(0.16,-0.10,-0.06),$$
 
-正好回到第 7 节直接求出的真实梯度。**这里不能再给每次采到的北京额外乘一次 $0.2$**：它已经通过“只有 20% 的机会出现”参与了平均，额外再乘会重复计算这个概率因素。
+正好回到前面直接求出的真实梯度。**这里不能再给每次采到的北京额外乘一次 $0.2$**：它已经通过“只有 20% 的机会出现”参与了平均，额外再乘会重复计算这个概率因素。
 
 还要注意：零奖励动作的 log-prob 梯度并不为零。例如采到“上海”，$\nabla_z\log p_{\text{上海}}=(-0.2,0.5,-0.3)$，只是本次乘了零奖励才变成零。真实平均梯度仍会压低“上海”的 logit，因为采到并强化“北京”时，也会产生压低其他 logits 的信号。
 
-## 14. “平均方式不同”应该怎样准确表述
+### 从单次估计到多次平均：一个状态内与多个状态间
 
-一个常见但不准确的说法是“样本的平均方式不同”。有限样本训练时，通常都用算术平均：
+单次采样得到的 $\hat g$ 是无偏的，但方差较大；真正训练时会把多个样本做算术平均：
 
-$$\hat g=\frac1N\sum_{i=1}^{N}\hat g^{(i)}.$$
+$$\hat g=\frac1N\sum_{k=1}^{N}\hat g^{(k)}.$$
 
-因此区别不在“怎么求平均”，而在：
+这里的 $N$ 有两种含义，对应两种“多次”。
+
+**其一，同一个状态、多次执行（rollout / 实验）。** 固定状态 $s$，按当前概率 $p$ 反复采样、执行、观察奖励，每次得到一个 $\hat g^{(k)}=r_{a_k}(e_{a_k}-p)$。回到本例：只有采到奖励为 1 的“北京”才产生非零估计，采到“上海”“南京”则为零。样本足够多时，“北京”的出现比例趋近它的概率 20%，样本平均趋近前面直接求出的真实梯度 $p_i(r_i-\bar r)$；有限次时这个比例会波动，所以它是**估计**而非精确值，$N$ 越大方差越小。
+
+**其二，多个状态、每个状态一个样本（example / 对象）。** 实际训练会面对很多状态。对一步任务，若状态来自固定分布 $d(s)$，整体目标是
+
+$$J(\theta)=\mathbb E_{s\sim d}\,\mathbb E_{a\sim p_\theta(\cdot\mid s)}\big[r(s,a)\big].$$
+
+一个 batch 采集 $s_k\sim d,\ a_k\sim p_\theta(\cdot\mid s_k)$，$k=1,\ldots,N$，估计为
+
+$$\hat g_\theta=\frac1N\sum_{k=1}^{N}r_k\,\nabla_\theta\log p_\theta(a_k\mid s_k).$$
+
+**这里不要求把每个状态的梯度都估计准确。** 即使某个状态只采一个动作，它贡献的仍是整体目标梯度的一个无偏样本；许多状态、许多单次样本一起平均，就共同估计出整体梯度。不同状态对应不同 logits，各自的局部信号分别反向传播，再聚合到共享参数 $\theta$ 上。
+
+两种“多次”还可以叠加：一个 batch 里既可以有多个状态，也可以对同一状态多次 rollout。无论哪种，平均都是普通算术平均——所以“样本的平均方式不同”这个常见说法并不准确。真正不同的是：
 
 - **采集到什么样本**；
 - **每条样本形成什么梯度、带什么权重**。
 
-本例中，保持模型不变：SFT 若反复提供“北京”，每条样本都是同一个监督梯度；奖励训练按 $p$ 采样，只有采到奖励为 1 的“北京”时，才产生那个非零估计。样本足够多时，“北京”的出现比例接近 20%，样本平均接近真实梯度；有限样本时这个比例会波动，所以它叫**梯度估计**。
-
-这段推导可以固定成三个层次：
+于是整条推导落成三个层次：
 
 $$\boxed{\begin{array}{c}\text{目标：最大化模型选择的期望奖励}\\[3pt]\downarrow\\[3pt]\text{真实梯度：把所有动作及其概率纳入求导}\\[3pt]\downarrow\\[3pt]\text{采样估计：只使用实际执行的动作及其奖励}\end{array}}$$
 
 **先求出的 logits 真实梯度解释“平均应该怎样调整”；后面的 one-hot 样本梯度解释“每次尝试怎样提供一个估计”。**
 
-## 15. 从固定状态回到实际训练的多个状态
-
-前面的固定状态分析，是为了隔离训练规则的区别。实际训练会面对很多状态。对于一步任务，如果状态来自固定分布 $d(s)$，整体目标可以写成：
-
-$$J(\theta)=\mathbb E_{s\sim d}\,\mathbb E_{a\sim p_\theta(\cdot\mid s)}\big[r(s,a)\big].$$
-
-一个 batch 可以采集 $s_i\sim d,\ a_i\sim p_\theta(\cdot\mid s_i)$，$i=1,\ldots,B$。**每个状态只采一个动作，也可以。** 整体参数梯度估计为：
-
-$$\hat g_\theta=\frac1B\sum_{i=1}^{B}r_i\nabla_\theta\log p_\theta(a_i\mid s_i).$$
-
-这时并不是把每个状态的梯度都估计准确再训练，而是用不同状态上的随机样本，共同估计整体目标的梯度。不同状态对应不同 logits，它们的局部信号分别反向传播，再聚合到共享参数 $\theta$ 上。
-
 这里假设 $d(s)$ 固定。若状态由模型前面的动作生成，就进入多步问题：当前动作既影响结果，也影响后续会遇到什么状态。那是下一阶段需要加入的结构。
 
-## 16. 小结
+## 5. 小结
 
 | 层次 | SFT | 一步奖励优化 |
 |---|---|---|
 | 在哪里学 | 某个给定前缀 $s$ | 某个给定前缀 $s$ |
 | 什么反馈 | 示范动作 $a^*$ | 执行后的奖励 $r(s,a)$ |
 | 最大化目标 | $\log p_\theta(a^*\mid s)$ | $\mathbb E_{a\sim p_\theta}[r(s,a)]$ |
-| logits 真实梯度 | $q-p$ | 第 $b$ 项为 $p_b(r_b-\bar r)$ |
-| 单样本 logits 信号 | $e_{a^*}-p$ | $r_i(e_{a_i}-p)$ |
+| logits 真实梯度 | $q-p$ | 第 $i$ 项为 $p_i(r_i-\bar r)$ |
+| 单样本 logits 信号 | $e_{a^*}-p$ | $r_k(e_{a_k}-p)$ |
 | 参数如何更新 | logits 信号经 $J_f^\top$ 回传 | logits 信号经 $J_f^\top$ 回传 |
 
 二者共享“调整 token 概率”的模型接口，但目标不同、样本来自的分布不同、每条样本带的权重也不同。推导顺序上，**先定义期望回报，对 logits 求真实梯度，与 SFT 比较，再经链式法则得到参数梯度，最后才用采样把它变成可执行的训练规则**——真实梯度回答“平均应该怎样调整”，one-hot 样本回答“每次尝试怎样提供一个估计”。
