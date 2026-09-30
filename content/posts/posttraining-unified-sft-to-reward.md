@@ -142,9 +142,13 @@ $F_{\mathrm{SFT}}$ 是负交叉熵，还不是由环境奖励定义的期望回�
 
 $$\log p_a=z_a-\log\Big(\sum_j e^{z_j}\Big).$$
 
-对某个 logit $z_b$ 求导。第一项 $\partial z_a/\partial z_b=\mathbf 1[a=b]$；第二项用链式法则，令 $u=\sum_j e^{z_j}$，则
+对某个 logit $z_b$ 求导。第一项 $\partial z_a/\partial z_b=\mathbf 1[a=b]$；第二项用链式法则，令 $u=\sum_j e^{z_j}$，先分两步：
 
-$$\frac{\partial\log u}{\partial z_b}=\frac{e^{z_b}}{\sum_j e^{z_j}}=p_b.$$
+$$\frac{\mathrm d\log u}{\mathrm d u}=\frac1u,\qquad \frac{\partial u}{\partial z_b}=e^{z_b},$$
+
+两者相乘：
+
+$$\frac{\partial\log u}{\partial z_b}=\frac1u\cdot e^{z_b}=\frac{e^{z_b}}{\sum_j e^{z_j}}=p_b.$$
 
 因此得到一个后面反复用到的公式：
 
@@ -176,7 +180,11 @@ $$p=(0.2,0.5,0.3),\qquad q=(1,0,0).$$
 
 $$q-p=(0.8,-0.5,-0.3).$$
 
-它要求提高“北京”的分数，降低另外两个分数。但真实调整的是 $\theta$：这个向量需要经过 $J_f^\top$ 传回参数，所以实际 logits 的变化不一定正好等于 $\eta(q-p)$。
+它要求提高“北京”的分数，降低另外两个分数。
+
+**但真实调整的从来不是 logits，而是参数 $\theta$。** $q-p$ 只是输出层“希望”收到的信号，它要先经过 $J_f^\top$ 反传成参数梯度，再由参数变化重新算出新的 logits。所以单看一条样本、更新一步后，实际 logits 的变化不一定正好等于 $\eta(q-p)$——中间隔着 $J_f^\top$ 这一层，$z$ 和 $\theta$ 并不是一一对应的。
+
+**在一个 batch 里，这一点会被进一步放大。** 同一次更新会把许多样本、许多状态各自的 $J_f^\top(q-p)$ 加在一起，共同落到共享的 $\theta$ 上。于是某一条样本的 logits 究竟怎么动，取决于整个 batch 的梯度聚合结果，而不只是它自己的 $q-p$：其他样本若在相关参数上给出方向不同的信号，会与它互相加强或抵消。（多状态情形的完整写法见第 15 节。）
 
 顺带说，若把 one-hot 的 $q$ 换成教师软分布，采用交叉熵的分布蒸馏仍然得到 $\nabla_\theta F=J_f^\top(q-p)$。这个局部更新公式本身不决定状态来自教师还是学生；状态来源是另一项选择。
 
