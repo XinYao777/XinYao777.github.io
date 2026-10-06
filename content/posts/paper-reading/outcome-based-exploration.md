@@ -404,10 +404,12 @@ $$
 
 $$
 \boxed{
+\begin{gathered}
 \text{Batch} =
-\text{outcome-level collision penalty}
+\text{outcome-level collision penalty}\\
 \approx
 \text{Rényi-2 entropy regularization}.
+\end{gathered}
 }
 $$
 
