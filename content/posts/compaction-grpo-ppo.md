@@ -165,17 +165,13 @@ $$
 通常在 rollout 时保存：
 
 $$
-q^{\mathrm{old}}_{k,t}
-=
-\log\pi_{\mathrm{old}}(a_{k,t}\mid H_k^{\mathrm{actual}},a_{k,\lt t}),
+q^{\mathrm{old}}_{k,t} = \log\pi_{\mathrm{old}}(a_{k,t}\mid H_k^{\mathrm{actual}},a_{k,\lt t}),
 $$
 
 训练时重新计算：
 
 $$
-q^\theta_{k,t}
-=
-\log\pi_\theta(a_{k,t}\mid H_k^{\mathrm{actual}},a_{k,\lt t}),
+q^\theta_{k,t} = \log\pi_\theta(a_{k,t}\mid H_k^{\mathrm{actual}},a_{k,\lt t}),
 $$
 
 再得到：
@@ -233,9 +229,7 @@ segment_2:
 各段计算得到的 action log-prob，可以按原有执行顺序逻辑拼接：
 
 $$
-\mathbf q_i^\theta
-=
-\operatorname{concat}
+\mathbf q_i^\theta = \operatorname{concat}
 (\mathbf q_{i,1}^\theta,\ldots,\mathbf q_{i,K_i}^\theta).
 $$
 
@@ -246,9 +240,7 @@ Old log-prob、ratio、action mask 也采用相同索引关系。
 Group 统计依然从 $G$ 次完整执行的最终奖励计算：
 
 $$
-\widehat A_i
-=
-\operatorname{GroupNorm}(R_1,\ldots,R_G)_i.
+\widehat A_i = \operatorname{GroupNorm}(R_1,\ldots,R_G)_i.
 $$
 
 然后将 $\widehat A_i$ 用于第 $i$ 次完整执行中的各段。
@@ -272,9 +264,7 @@ $$
 ### 1. 每段先平均，再对所有段平均
 
 $$
-L_{\mathrm{segment}}
-=
-\frac{1}{\sum_iK_i}
+L_{\mathrm{segment}} = \frac{1}{\sum_iK_i}
 \sum_{i=1}^{G}\sum_{k=1}^{K_i}
 \frac{1}{n_{i,k}}\sum_{t=1}^{n_{i,k}}\ell_{i,k,t}.
 $$
@@ -299,9 +289,7 @@ $$
 ### 2. 先恢复完整 rollout 的平均，再对 rollout 平均
 
 $$
-L_{\mathrm{rollout}}
-=
-\frac1G\sum_{i=1}^{G}
+L_{\mathrm{rollout}} = \frac1G\sum_{i=1}^{G}
 \frac1{T_i}
 \sum_{k=1}^{K_i}\sum_{t=1}^{n_{i,k}}\ell_{i,k,t}.
 $$
@@ -309,9 +297,7 @@ $$
 若已计算每段均值 $\overline\ell_{i,k}$，等价写法是：
 
 $$
-L_{\mathrm{rollout}}
-=
-\frac1G\sum_i\sum_k
+L_{\mathrm{rollout}} = \frac1G\sum_i\sum_k
 \frac{n_{i,k}}{T_i}\overline\ell_{i,k}.
 $$
 
@@ -320,9 +306,7 @@ $$
 ### 3. 全 batch 的 action token 统一平均
 
 $$
-L_{\mathrm{token}}
-=
-\frac{
+L_{\mathrm{token}} = \frac{
 \sum_i\sum_k\sum_t\ell_{i,k,t}
 }{
 \sum_iT_i
